@@ -1,29 +1,25 @@
+
 /*
 Copyright (c) 2009, Intel Corporation
 All rights reserved.
-
-Redistribution and use in source and binary forms, with or without modification,
-are permitted provided that the following conditions are met:
-
-   * Redistributions of source code must retain the above copyright notice,
-this list of conditions and the following disclaimer.
-   * Redistributions in binary form must reproduce the above copyright notice,
-this list of conditions and the following disclaimer in the documentation 
-and/or other materials provided with the distribution.
-   * Neither the name of Intel Corporation nor the names of its contributors
-may be used to endorse or promote products derived from this software without
-specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
-INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY 
-OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
-EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following
+conditions are met:
+ 
+    * Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+disclaimer.
+    * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
+disclaimer in the documentation and/or other materials provided with the distribution.
+    * Neither the name of Intel Corporation nor the names of its contributors may be used to endorse or promote products
+derived from this software without specific prior written permission.
+ 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 //******************************************************************************
@@ -35,8 +31,8 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //             P1.2 = Data in signal
 //             P1.3 = Data in enable
 //
-//             P2.3 = Supervisor In
 //             P2.4 = Supervisor In
+//             P2.5 = Supervisor In
 //
 //	       Tested against Impinj v 3.0.2 reader, Miller-4 encodings
 //	       Alien reader code is out of date
@@ -52,18 +48,31 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //        - READs ignore membank, wordptr, and wordcount fields. (What READs do
 //          return is dependent on what application you have configured in step 1.)
 //        - FIXME: document session timeouts
+//
 //******************************************************************************
 
 ////////////////////////////////////////////////////////////////////////////////
 // Step 1: pick an application
 // simple hardcoded query-ack
-#define SIMPLE_QUERY_ACK              1
+#define SIMPLE_QUERY_ACK              0
 // return sampled sensor data as epc. best for range.
-#define SENSOR_DATA_IN_ID             0
+#define SENSOR_DATA_IN_ID             1
 // support read commands. returns one word of counter data
 #define SIMPLE_READ_COMMAND           0
 // return sampled sensor data in a read command. returns three words of accel data
 #define SENSOR_DATA_IN_READ_COMMAND   0
+////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
+// Step 1A: pick a sensor type
+// If you're not using the SENSOR_DATA_IN_ID or SENSOR_DATA_IN_READ_COMMAND apps,
+// then this is a don't care.
+// use accel sensor sampled with 10-bit ADC
+#define USE_ACCEL_SENSOR              1
+// use built-in temperature sensor sampled with a 10-bit ADC
+#define USE_TEMP_SENSOR               0
+// for test purposes only
+#define USE_NULL_SENSOR               0
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -87,7 +96,8 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ////////////////////////////////////////////////////////////////////////////////
 // Step 4: set EPC and TID identifiers (optional)
-#define EPC   0x0D, 0x05, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+//#define EPC   0xD5, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+#define EPC   0xD5, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 #define TID_DESIGNER_ID_AND_MODEL_NUMBER  0xFF, 0xF0, 0x01
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -126,7 +136,7 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // pin assignments
 #define VOLTAGE_SV_PIN                BIT4          // (of port 2) = P2.4 - input pin for voltage supervisor
-#define VOLTAGE_SV_ALT_PIN            BIT3       // (of port 2) = P2.3 - input pin for voltage supervisor
+#define VOLTAGE_SV_ALT_PIN            BIT5       // (of port 2) = P2.5 - input pin for voltage supervisor
 #define INPUT_PIN                     BIT2          // (of port 1) = P1.2
 #define BIT_IN_ENABLE                 BIT3          // P1.3
 #define OUTPUT_PIN                    BIT1          // P1.1
@@ -172,6 +182,12 @@ int power_counter = 0;
   BCSCTL2 = 0; // Rext = ON
 #endif
 #endif
+  
+#define SLEEP_AGGRESSIVELY        0
+// in theory, sleeping aggressively should greatly improve performance,
+// but in practice ... not so much. in fact, it's quite detrimental to
+// performance. i need to think more about this strategy, but for the
+// moment it's #define'd out of the standard code base.
 
 #define BUFFER_SIZE 16                         // max of 16 bytes rec. from reader
 #define MAX_BITS (BUFFER_SIZE * 8)
@@ -187,8 +203,13 @@ volatile unsigned char* destorig = &cmd[0];         // pointer to beginning of c
 
 volatile unsigned char queryReply[]= { 0x00, 0x03, 0x00, 0x00};
 
-// ackReply:  First two bytes are the preamble.  Last two bytes are the crc.
-volatile unsigned char ackReply[]  = { 0x30, 0x00, EPC, 0x00, 0x00};
+volatile unsigned char ackReply[]  = { 
+                                  // frame-sync preamble - 16 bits
+                                  // pc - 16 bits
+                                  // epc - 64 bits
+                                  // crc-16 - 16 bits
+                                  // filler - 16 bits of nothing (don't send)
+                                  0x30, 0x00, 0x00, 0x00, EPC, 0x00, 0x00, 0x00, 0x00};
 
 // first 8 bits are the EPCGlobal identifier, followed by a 12-bit tag designer identifer (made up), followed by a 12-bit model number
 volatile unsigned char tid[] = { 0xE2, TID_DESIGNER_ID_AND_MODEL_NUMBER };
@@ -256,10 +277,10 @@ unsigned char subcarrierNum;
 unsigned char TRext;
 unsigned char delimiterNotFound;
 unsigned short ackReplyCRC, queryReplyCRC, readReplyCRC;
+#if ENABLE_SLOTS
 unsigned short Q = 0, slot_counter = 0, shift = 0;
-unsigned short readTempSensor;
-unsigned char readAddress;
-unsigned int counter = 0;
+#endif
+unsigned int read_counter = 0, sensor_counter = 0;
 unsigned char timeToSample = 0;
 
 volatile unsigned short inSleepMode = 0;
@@ -287,6 +308,10 @@ void handle_session_timeout();
 inline int bitCompare(unsigned char *startingByte1, unsigned short startingBit1, unsigned char *startingByte2, unsigned short startingBit2, unsigned short len);
 
 #endif
+#if ENABLE_SLOTS
+void lfsr();
+inline void loadRN16(), mixupRN16();
+#endif
 
 void sendToReader(volatile unsigned char *data, unsigned char numOfBits);
 unsigned short crc16_ccitt(volatile unsigned char *data, unsigned short n);
@@ -294,8 +319,6 @@ unsigned char crc5(volatile unsigned char *buf, unsigned short numOfBits);
 void setup_to_receive();
 void sleep();
 unsigned short is_power_good();
-void lfsr();
-inline void loadRN16(), mixupRN16();
 void crc16_ccitt_readReply(unsigned int);
 int i;
 inline void handle_query(volatile short nextState);
@@ -309,7 +332,13 @@ inline void handle_nak(volatile short nextState);
 inline void do_nothing();
 
 #if READ_SENSOR
+#if USE_ACCEL_SENSOR
 #include "accel_sensor.h"
+#elif USE_TEMP_SENSOR
+#include "temp_sensor.h"
+#elif USE_NULL_SENSOR
+#include "null_sensor.h"
+#endif
 #endif
 
 int main(void)
@@ -324,9 +353,13 @@ int main(void)
   P1IFG = 0;
   P2IFG = 0;
   P2IES = VOLTAGE_SV_ALT_PIN;
-  P2IE |= (VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
+#if SLEEP_AGGRESSIVELY
   // VOLTAGE_SV_PIN fires when VS goes from low to high;
   // VOLTAGE_SV_ALT_PIN fires when VS goes from high to low
+  P2IE |= (VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
+#else
+  P2IE |= VOLTAGE_SV_PIN;
+#endif
   
 #if !SIMULATE_SV_INTERRUPT
   // Check power on bootup, decide to receive or sleep.
@@ -345,7 +378,7 @@ int main(void)
 #endif
 #endif 
   
-#if 1
+#if ENABLE_SLOTS
   // setup int epc
   epc = ackReply[2]<<8;
   epc |= ackReply[3];
@@ -423,7 +456,14 @@ int main(void)
 #endif
   
 #if SENSOR_DATA_IN_ID
-  // this branch is for sensor data in the id
+  // this branch is for sensor data in the id. format for payload is:
+  // one-byte type flag, nine bytes for sensor data (fixed), then
+  // first two bytes of the epc code
+  ackReply[10] = ackReply[4];
+  ackReply[11] = ackReply[5];
+  ackReply[4] = 0x00;
+  ackReply[5] = 0x00;
+  ackReply[2] = SENSOR_DATA_TYPE_ID;
   state = STATE_READ_SENSOR;
   timeToSample++;
 #else
@@ -471,7 +511,7 @@ int main(void)
     handle_session_timeout();
 #endif
     
-#if 1
+#if ENABLE_SLOTS
     if (shift < 4)
         shift += 1;
     else
@@ -500,7 +540,6 @@ int main(void)
           //DEBUG_PIN5_HIGH;
           handle_query(STATE_REPLY);
           //DEBUG_PIN5_LOW;
-          //if ( counter == 0xffff ) counter = 0; else counter++;
           setup_to_receive();
         }
         //////////////////////////////////////////////////////////////////////
@@ -541,7 +580,6 @@ int main(void)
           //DEBUG_PIN5_HIGH;
           handle_query(STATE_REPLY);
           //DEBUG_PIN5_LOW;
-          //if ( counter == 0xffff ) counter = 0; else counter++;
           setup_to_receive();
         }
         //////////////////////////////////////////////////////////////////////
@@ -593,6 +631,8 @@ int main(void)
           //DEBUG_PIN5_LOW;
           delimiterNotFound = 1;
         } // select command
+        
+        // FIXME: need disposal for acks sent for non-0 slot counters
        
       break;
       }
@@ -612,7 +652,9 @@ int main(void)
           //DEBUG_PIN5_LOW;
           setup_to_receive();
 #elif SENSOR_DATA_IN_ID
-          handle_ack(STATE_READY);
+          handle_ack(STATE_ACKNOWLEDGED);
+          //handle_ack(STATE_READY);
+          // FIXME FIXME should be acknowledged
           delimiterNotFound = 1; // reset
 #else
           // this branch for hardcoded query/acks
@@ -992,18 +1034,25 @@ int main(void)
       {
         
 #if SENSOR_DATA_IN_READ_COMMAND
+        waitingForBits = 0;
         read_sensor(&readReply[0]);
+        waitingForBits = 1;
         // crc is computed in the read state
         RECEIVE_CLOCK;
-        state = STATE_ARBITRATE;  
+        state = STATE_READY;  
         delimiterNotFound = 1; // reset
 #elif SENSOR_DATA_IN_ID
-        read_sensor(&ackReply[6]);
+        //DEBUG_PIN5_HIGH;
+        //waitingForBits = 0;
+        read_sensor(&ackReply[3]);
+        //waitingForBits = 1;
+        //DEBUG_PIN5_LOW;
         RECEIVE_CLOCK;
         ackReplyCRC = crc16_ccitt(&ackReply[0], 14);
         ackReply[15] = (unsigned char)ackReplyCRC;
         ackReply[14] = (unsigned char)__swap_bytes(ackReplyCRC);
-        state = STATE_ARBITRATE;
+        //state = STATE_ARBITRATE;
+        state = STATE_READY;
         delimiterNotFound = 1; // reset
 #endif
         
@@ -1187,6 +1236,7 @@ inline void handle_query(volatile short nextState)
     
     // mix up the RN16 table a bit for next time
     mixupRN16();
+    
   }
 
   // slot counter isn't 0, so we don't send a reply. We wait for a
@@ -1347,18 +1397,20 @@ inline void handle_select(volatile short nextState)
   }
   
 #else
-/***
+
+  /***
   SL = SL_ASSERTED;
   session_table[0] = SESSION_STATE_A;
   session_table[1] = SESSION_STATE_A;
   session_table[2] = SESSION_STATE_A;
   session_table[3] = SESSION_STATE_A;
-  ***/
+  **/
+
 
 #endif
   
   state = nextState;
-  DEBUG_PIN5_LOW;
+  //DEBUG_PIN5_LOW;
 }
 
 inline void handle_queryrep(volatile short nextState)
@@ -1523,7 +1575,7 @@ inline void handle_queryadjust(volatile short nextState)
 
 inline void handle_ack(volatile short nextState)
 {
-  DEBUG_PIN5_HIGH;
+  //DEBUG_PIN5_HIGH;
   TACCTL1 &= ~CCIE;
   TAR = 0;
   if ( NUM_ACK_BITS == 20 )
@@ -1546,7 +1598,7 @@ inline void handle_ack(volatile short nextState)
   // after that sends tagResponse
   sendToReader(&ackReply[0], 129);
   state = nextState;
-  DEBUG_PIN5_LOW;
+  //DEBUG_PIN5_LOW;
 }
 
 inline void do_nothing()
@@ -1581,7 +1633,7 @@ inline void handle_request_rn(volatile short nextState)
     while ( TAR < 170 );
   TAR = 0;
   sendToReader(&queryReply[0], 33);
-  if ( counter == 0xffff ) counter = 0; else counter++;
+  if ( read_counter == 0xffff ) read_counter = 0; else read_counter++;
   state = nextState;
 }
 
@@ -1620,8 +1672,8 @@ inline void handle_read(volatile short nextState)
   
 #define USE_COUNTER 1
 #if USE_COUNTER
-  readReply[0] = __swap_bytes(counter);
-  readReply[1] = counter;
+  readReply[0] = __swap_bytes(read_counter);
+  readReply[1] = read_counter;
 #else
   readReply[0] = 0x03;
   readReply[1] = 0x04;
@@ -1638,7 +1690,6 @@ inline void handle_read(volatile short nextState)
   // 16 bits for data + 16 bits for the handle + 16 bits for the CRC + leading 0 + add one to number of bits for seong's xmit code
   sendToReader(&readReply[0], 50);
   state = nextState;
-  //if ( counter == 0xffff ) counter = 0; else counter++;
   delimiterNotFound = 1; // reset
 #endif          
 }
@@ -1686,7 +1737,13 @@ inline void setup_to_receive()
   P1IFG = 0;  // Clear interrupt flag
             
   P1IE  |= INPUT_PIN; // Enable Port1 interrupt
+#if SLEEP_AGGRESSIVELY
+  // VOLTAGE_SV_PIN fires when VS goes from low to high;
+  // VOLTAGE_SV_ALT_PIN fires when VS goes from high to low
   P2IE |= (VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
+#else
+  P2IE |= VOLTAGE_SV_PIN;
+#endif
   
   //if ( (P1OUT & BIT_IN_ENABLE ) != BIT_IN_ENABLE  )
   //if ( (P1IE & INPUT_PIN ) != INPUT_PIN  )
@@ -1712,7 +1769,6 @@ inline void sleep()
 
   int i;
   
-  //P4OUT &= ~BIT3;
   _BIC_SR(GIE);
   
 #if SIMULATE_SV_INTERRUPT
@@ -1732,46 +1788,40 @@ inline void sleep()
   //P2IES |= VOLTAGE_SV_ALT_PIN;
   //P2IE |= (VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
   P2IFG &= ~(VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
+#if SLEEP_AGGRESSIVELY
   // only allow vs ints that tell me we have enough power
   P2IE &= ~VOLTAGE_SV_ALT_PIN;
+#endif
   P1IE = 0;
   P1IFG = 0;
 #endif
   
   TACTL = 0;
   inSleepMode = 1;
-  //P4OUT |= BIT5;
-
-  //P4OUT |= BIT3;
   
 #if !SIMULATE_SV_INTERRUPT
   _BIS_SR(GIE);
   if (is_power_good()) {
     P2IFG &= ~(VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
-    //P4OUT |= BIT3;
     //_BIS_SR(GIE);
     //P2IFG |= VOLTAGE_SV_PIN;
     inSleepMode = 0;
     P1IE |= INPUT_PIN;
     P1OUT |= BIT_IN_ENABLE;
-    //P4OUT &= ~BIT7;
-    //P4OUT |= BIT3;
     return;
   }
 #endif
   
-  //P4OUT |= BIT7;
   _BIS_SR(LPM4_bits | GIE);
-  //P4OUT &= ~BIT7;
 
-  //P4OUT &= ~BIT3;
   _BIC_SR(GIE);
+#if SLEEP_AGGRESSIVELY
   P2IE |= VOLTAGE_SV_ALT_PIN;
+#endif
   inSleepMode = 0;
   P1IE |= INPUT_PIN;
   P1OUT |= BIT_IN_ENABLE;
   _BIS_SR(GIE);
-  //P4OUT |= BIT3;
     
   return;
 }
@@ -1800,10 +1850,35 @@ __interrupt void Port2_ISR(void)   // (5-6 cycles) to enter interrupt
   // page 2-11 of the x2xx family user's guide:
   //  "Interrupt nesting is enabled if the GIE bit is set inside an interrupt
   //  service route. When interrupt nesting is enabled, any interrupt occurring
-  //  during an interrupt service routine with interrupt the routine, regardless
+  //  during an interrupt service routine will interrupt the routine, regardless
   //  of the interrupt priorities."
-  //P4OUT &= ~BIT3;
+#if READ_SENSOR
+  if ( is_sensor_sampling() ) 
+  {
+    		// this is an orderly wake out of sleep mode
+    		P2IFG &= ~(VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
+    		P1IFG = 0;
+    		P1IE = 0;
+    		//TACTL = 0;
+    		//TACCTL0 = 0;
+    		//TACCTL1 = 0;
+    		//TAR = 0;
+    		//state = STATE_ARBITRATE;
+                inSleepMode = 0;
+                //P1IE |= INPUT_PIN;
+                //P1OUT |= BIT_IN_ENABLE;
+                //P4OUT &= ~BIT7;
+    		//LPM4_EXIT;
+                // reenable interrupts
+                //P2IE |= VOLTAGE_SV_ALT_PIN;
+                //_BIS_SR(GIE);
+                                // force a PUC
+		WDTCTL = 0;
+                return;
+  }
+#endif
   _BIC_SR(GIE);
+  //P1IE  &= ~INPUT_PIN;
   //P2IE &= ~VOLTAGE_SV_ALT_PIN;
 
   if ( ( P2IFG & VOLTAGE_SV_PIN ) == VOLTAGE_SV_PIN )
@@ -1826,7 +1901,6 @@ __interrupt void Port2_ISR(void)   // (5-6 cycles) to enter interrupt
                 //P4OUT &= ~BIT7;
     		LPM4_EXIT;
                 // reenable interrupts
-                //P4OUT |= BIT3;
                 //P2IE |= VOLTAGE_SV_ALT_PIN;
                 _BIS_SR(GIE);
   	}
@@ -1882,22 +1956,29 @@ __interrupt void Port2_ISR(void)   // (5-6 cycles) to enter interrupt
   else if ( ( P2IFG & VOLTAGE_SV_ALT_PIN ) == VOLTAGE_SV_ALT_PIN )
   {
 	// VS went from high to low - force us to go to sleep in main loop
+        DEBUG_PIN5_HIGH;
     	P2IFG &= ~VOLTAGE_SV_ALT_PIN;
+#if SLEEP_AGGRESSIVELY
 	delimiterNotFound = 1;
-        //P4OUT |= BIT7;
-        
-	LPM4_EXIT;
+        LPM4_EXIT;
+        P1IE |= INPUT_PIN;
         // GIE bit will be reenabled as a side effect of the trip
         // through the delimiterNotFound == 1 loop
         if ( waitingForBits == 1 ) {
           _BIS_SR(GIE);
         }
+#else
+        //P1IE |= INPUT_PIN;
+        _BIS_SR(GIE);
+#endif
+        DEBUG_PIN5_LOW;
         
   }
   else
   {
-    // I have no idea what this is, but clear it and reenabke interrupts
+    // I have no idea what this is, but clear it and reenable interrupts
     P2IFG = 0;
+    //P1IE |= INPUT_PIN;
     _BIS_SR(GIE);
   }
 }
@@ -2560,8 +2641,7 @@ unsigned char crc5(volatile unsigned char *buf, unsigned short numOfBits)
 
 }
 
-#if 1
-
+#if ENABLE_SLOTS
 
 void lfsr()
 { 

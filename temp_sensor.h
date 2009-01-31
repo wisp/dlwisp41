@@ -22,22 +22,7 @@ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING 
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-// these bit definitions are specific to WISP 4.1 DL
-
-#define SENSOR_DATA_TYPE_ID       0x0D
-
-#define ACCEL_ENABLE_BIT          BIT5   // 1.5
-#define SET_ACCEL_ENABLE_DIR      P1DIR |= ACCEL_ENABLE_BIT
-#define CLEAR_ACCEL_ENABLE_DIR    P1DIR &= ~ACCEL_ENABLE_BIT
-#define TURN_ON_ACCEL_ENABLE      P1OUT |= ACCEL_ENABLE_BIT
-#define TURN_OFF_ACCEL_ENABLE     P1OUT &= ~ACCEL_ENABLE_BIT
-
-#define X_INCH                INCH_2  // A2
-#define Y_INCH                INCH_1  // A1
-#define Z_INCH                INCH_0  // A0
-
-#define DATA_LENGTH_IN_WORDS      3
-#define DATA_LENGTH_IN_BYTES      (DATA_LENGTH_IN_WORDS*2)
+#define SENSOR_DATA_TYPE_ID       0x0F
 
 unsigned char sensor_busy = 0;
 
@@ -59,49 +44,27 @@ void read_sensor(unsigned char volatile *target)
         // already off. Only needs to be done when READ has set
         P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
         
-        // Power sensor, enable analog in     
-        ADC10AE0 |= (X_INCH + Y_INCH + Z_INCH);
-        SET_ACCEL_ENABLE_DIR;
-        TURN_ON_ACCEL_ENABLE;
-        
-        DEBUG_PIN5_HIGH;
+        // Set up ADC for internal temperature sensor  
+        ADC10CTL0 &= ~ENC; // make sure this is off otherwise settings are locked.
+        ADC10CTL1 = INCH_10 + ADC10DIV_3;         // Temp Sensor ADC10CLK/4
+        ADC10CTL0 = SREF_1 + ADC10SHT_3 + REFON + ADC10ON + ADC10IE;
         
         // a little time for regulator to stabilize active mode current AND
         // filter caps to settle.
-        for (int i = 0; i < 600; i++);
+        for (int i = 0; i < 50; i++);
         
-        // Grab data
+        // start conversion
         unsigned int k = 0;
-        for (int i = 0; i < DATA_LENGTH_IN_WORDS; i++)
-        {
+        ADC10CTL0 |= ENC + ADC10SC;             // Sampling and conversion start
+        sensor_busy++; // prevent race condition - needed for all sampling with lpm4s
+        LPM4;       // go to sleep
+        sensor_busy = 0;
         
-          ADC10CTL0 &= ~ENC; // make sure this is off otherwise settings are locked.
-          ADC10CTL0 = SREF_0 + ADC10SHT_3 + ADC10ON + ADC10IE;
-          if (i == 0)
-            ADC10CTL1 = ADC10DIV_4 + ADC10SSEL_0 + SHS_0 + CONSEQ_0 + X_INCH;
-          else if (i == 1)
-            ADC10CTL1 = ADC10DIV_4 + ADC10SSEL_0 + SHS_0 + CONSEQ_0 + Y_INCH;
-          else
-            ADC10CTL1 = ADC10DIV_4 + ADC10SSEL_0 + SHS_0 + CONSEQ_0 + Z_INCH;
-          ADC10CTL0 |= ENC;
-          ADC10CTL0 |= ADC10SC;
-          sensor_busy++; // prevent race condition - needed for all sampling with lpm4s
-          LPM4;
-          sensor_busy = 0;
-          
-          *(target + k + 1 ) = (ADC10MEM & 0xff);
-          // grab msb bits and store it
-          *(target + k) = (ADC10MEM & 0x0300) >> 8;
-          
-          k += 2;
-        }
-        
-        DEBUG_PIN5_LOW;
+        *(target + k + 1 ) = (ADC10MEM & 0xff);
+        // grab msb bits and store it
+        *(target + k) = (ADC10MEM & 0x0300) >> 8;
         
         // Power off sensor and adc
-        CLEAR_ACCEL_ENABLE_DIR;
-        TURN_OFF_ACCEL_ENABLE;
-        ADC10AE0 &= ~(X_INCH + Y_INCH + Z_INCH);
         ADC10CTL0 &= ~ENC;
         ADC10CTL1 = 0;       // turn adc off
         ADC10CTL0 = 0;       // turn adc off
