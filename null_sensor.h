@@ -24,6 +24,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define SENSOR_DATA_TYPE_ID       0x0C
 
+#define DATA_LENGTH_IN_WORDS      1
+#define DATA_LENGTH_IN_BYTES      (DATA_LENGTH_IN_WORDS*2)
+
 void init_sensor()
 {
   return;
@@ -39,7 +42,7 @@ void read_sensor(unsigned char volatile *target)
         if(!is_power_good())
           sleep();
   
-        P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
+        P1OUT &= ~RX_EN_PIN;   // turn off comparator
         
         unsigned int k = 0;
         

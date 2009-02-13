@@ -1,4 +1,3 @@
-
 /*
 Copyright (c) 2009, Intel Corporation
 All rights reserved.
@@ -24,7 +23,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //******************************************************************************
 //  WISP 4.1
-//  Device: MSP430-2032
+//  Device: MSP430-2132
+//
+//  Version HW4.1_SW6.0
 //
 //  Pinout:
 //             P1.1 = Data out signal
@@ -47,37 +48,64 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //        - SELECTS don't support truncation.
 //        - READs ignore membank, wordptr, and wordcount fields. (What READs do
 //          return is dependent on what application you have configured in step 1.)
-//        - FIXME: document session timeouts
-//
+//        - I sometimes get erroneous-looking session values in QUERYREP commands.
+//          For the time being, I just parse the command as if the session value
+//          is the same as my previous_session value.
+//        - QUERYs use a pretty aggressive slotting algorithm to preserve power.
+//          See the comments in that function for details.
+//        - Session timeouts work differently than what's in table 6.15 of the spec.
+//          Here's what we do:
+//            SL comes up as not asserted, and persists as long as it's in ram retention
+//            mode or better.
+//            All inventory flags come up as 'A'. S0's inventory flag persists as
+//            long as it's in ram retention mode or better. S1's inventory flag persists
+//            as long as it's in an inventory round and in ram retention mode or better;
+//            otherwise it is reset to 'A' with every reset at the top of the while
+//            loop. S2's and S3's inventory flag is reset to 'A' with every reset at
+//            the top of the while loop.
 //******************************************************************************
 
 ////////////////////////////////////////////////////////////////////////////////
 // Step 1: pick an application
 // simple hardcoded query-ack
-#define SIMPLE_QUERY_ACK              0
+#define SIMPLE_QUERY_ACK              1
 // return sampled sensor data as epc. best for range.
-#define SENSOR_DATA_IN_ID             1
+#define SENSOR_DATA_IN_ID             0
 // support read commands. returns one word of counter data
 #define SIMPLE_READ_COMMAND           0
 // return sampled sensor data in a read command. returns three words of accel data
 #define SENSOR_DATA_IN_READ_COMMAND   0
 ////////////////////////////////////////////////////////////////////////////////
 
+
 ////////////////////////////////////////////////////////////////////////////////
 // Step 1A: pick a sensor type
 // If you're not using the SENSOR_DATA_IN_ID or SENSOR_DATA_IN_READ_COMMAND apps,
 // then this is a don't care.
-// use accel sensor sampled with 10-bit ADC
-#define USE_ACCEL_SENSOR              1
-// use built-in temperature sensor sampled with a 10-bit ADC
-#define USE_TEMP_SENSOR               0
-// for test purposes only
-#define USE_NULL_SENSOR               0
+// Choices:
+// use "0C" - static data - for test purposes only
+#define SENSOR_NULL                   0
+// use "0D" accel sensor sampled with 10-bit ADC, full RC settling time
+#define SENSOR_ACCEL                  1
+// use "0B" accel sensor sampled with 10-bit ADC, partial RC settling ("quick")
+// for more info, see wiki: Code Examples
+#define SENSOR_ACCEL_QUICK            2
+// use "0F" built-in temperature sensor sampled with a 10-bit ADC
+#define SENSOR_INTERNAL_TEMP          3
+// use "0E" external temperature sensor sampled with a 10-bit ADC
+#define SENSOR_EXTERNAL_TEMP          4
+// use "0A" comm statistics
+#define SENSOR_COMM_STATS             5
+
+// Choose Active Sensor:
+#define ACTIVE_SENSOR                 SENSOR_ACCEL_QUICK
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-// Step 2: pick a reader
-#define ALIEN_9800_READER             0           // OUT OF DATE - do not use
+// Step 2: pick a reader and wisp hardware
+// make sure this syncs with project target
+#define BLUE_WISP                     0x41
+#define WISP_VERSION                  BLUE_WISP
 #define IMPINJ_READER                 1
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -85,21 +113,39 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Step 3: pick protocol features
 // The spec actually requires all these features, but as a practical matter 
 // supporting things like slotting and sessions requires extra power and thus 
-// limits range. Truthfully, the WISP works pretty well without these features
-// enabled. Also, if you are running out of room on flash -- e.g., you're
-// using the flash-limited free IAR kickstart compiler -- you probably want to
-// leave these features out.
+// limits range. Another factor is if you are running out of room on flash --
+// e.g., you're using the flash-limited free IAR kickstart compiler -- you probably
+// want to leave these features out unless you really need them.
+//
+// You only need ENABLE_SLOTS when you're working with more than one WISP. The
+// code will run fine without ENABLE_SLOTS if you're using one WISP with
+// multiple non-WISP rfid tags.
+//
+// ENABLE_SESSIONS is new code that hasn't been tested in a multiple reader
+// environment. Also note a workaround I use in handle_queryrep to deal with
+// what appears to be unexpected session values in the reader I'm using.
+//
+// Known issue: ENABLE_SLOTS and ENABLE_SESSIONS won't work together;
+// it's probably just a matter of finding the right reply timing in handle_query
 #define ENABLE_SLOTS 			0
 #define ENABLE_SESSIONS			0
-#define ENABLE_HANDLE_CHECKING          0 // under development ...
+#define ENABLE_HANDLE_CHECKING          0 // not implemented yet ...
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
 // Step 4: set EPC and TID identifiers (optional)
-//#define EPC   0xD5, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-#define EPC   0xD5, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+#define WISP_ID 0x00, 2
+#define EPC   0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, WISP_VERSION, WISP_ID
 #define TID_DESIGNER_ID_AND_MODEL_NUMBER  0xFF, 0xF0, 0x01
 ////////////////////////////////////////////////////////////////////////////////
+
+#if(WISP_VERSION == BLUE_WISP)
+  #include <msp430x21x2.h>
+  #include "pinDefWISP4.1DL.h"
+  #define USE_2132  1
+#else
+  #error "WISP Version not supported"
+#endif
 
 #if SIMPLE_QUERY_ACK
 #define ENABLE_READS                  0
@@ -126,46 +172,25 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MILLER_2_ENCODING             0             // not tested ... use ayor
 #define MILLER_4_ENCODING             1
 
-// make sure this syncs with project target
-#define USE_2132  1
-#if USE_2132
-#include <msp430x21x2.h>
-#else
-#include <msp430x22x4.h>
-#endif
+// as per mapping in monitor code
+#define wisp_debug_1                  DEBUG_1_4   // P1.4
+#define wisp_debug_2                  DEBUG_2_3   // P2.3
+#define wisp_debug_3                  CLK_A       // P3.0
+#define wisp_debug_4                  TX_A        // P3.4
+#define wisp_debug_5                  RX_A        // P3.5
+#define MONITOR_DEBUG_ON                 0
 
-// pin assignments
-#define VOLTAGE_SV_PIN                BIT4          // (of port 2) = P2.4 - input pin for voltage supervisor
-#define VOLTAGE_SV_ALT_PIN            BIT5       // (of port 2) = P2.5 - input pin for voltage supervisor
-#define INPUT_PIN                     BIT2          // (of port 1) = P1.2
-#define BIT_IN_ENABLE                 BIT3          // P1.3
-#define OUTPUT_PIN                    BIT1          // P1.1
-
-// used for debugging only
-#define SIMULATE_SV_INTERRUPT         0
-int power_counter = 0;
-#define FAKE_VOLTAGE_SV_PIN           BIT7      // (of port 1) = 1.7. port 2.4 isn't physically exposed, so if you want to fake
-                                        // out the sv interrupt pin, you have to redefine it to a pin that is physically exposed
-#define DEBUG_PINS_ENABLED            1
+#define DEBUG_PINS_ENABLED            0
+#if DEBUG_PINS_ENABLED
 #define DEBUG_PIN5_HIGH               P3OUT |= BIT5;
 #define DEBUG_PIN5_LOW                P3OUT &= ~BIT5;
-
+#else
+#define DEBUG_PIN5_HIGH               
+#define DEBUG_PIN5_LOW                
+#endif
 
 // ------------------------------------------------------------------------
 
-#if ALIEN_9800_READER
-#define SEND_CLOCK  \
-  BCSCTL1 = XT2OFF + RSEL3 + RSEL1 ; \
-  DCOCTL = 0;
-  //DCOCTL = DCO2;
-  // DCO seems to work from dco0 up to dco2
-#define RECEIVE_CLOCK \
-  BCSCTL1 = XT2OFF + RSEL3 + RSEL2;  \
-  DCOCTL = DCO1+DCO0; \
-  BCSCTL2 = 0; // Rext = ON
-  // for rsel 3 + 2, dco works from 0 to DCO2
-  // have not tested rsel 3 + 1
-#else
 #define SEND_CLOCK  \
   BCSCTL1 = XT2OFF + RSEL3 + RSEL0 ; \
     DCOCTL = DCO2 + DCO1 ;
@@ -175,19 +200,6 @@ int power_counter = 0;
   BCSCTL1 = XT2OFF + RSEL3 + RSEL1 + RSEL0; \
   DCOCTL = 0; \
   BCSCTL2 = 0; // Rext = ON
-#if 0
-  // old 5.7 Mhz clock
-  BCSCTL1 = XT2OFF + RSEL3 + RSEL2; /* DCOCTL = DCO1; */ \
-  DCOCTL = DCO1+DCO0; \
-  BCSCTL2 = 0; // Rext = ON
-#endif
-#endif
-  
-#define SLEEP_AGGRESSIVELY        0
-// in theory, sleeping aggressively should greatly improve performance,
-// but in practice ... not so much. in fact, it's quite detrimental to
-// performance. i need to think more about this strategy, but for the
-// moment it's #define'd out of the standard code base.
 
 #define BUFFER_SIZE 16                         // max of 16 bytes rec. from reader
 #define MAX_BITS (BUFFER_SIZE * 8)
@@ -203,13 +215,8 @@ volatile unsigned char* destorig = &cmd[0];         // pointer to beginning of c
 
 volatile unsigned char queryReply[]= { 0x00, 0x03, 0x00, 0x00};
 
-volatile unsigned char ackReply[]  = { 
-                                  // frame-sync preamble - 16 bits
-                                  // pc - 16 bits
-                                  // epc - 64 bits
-                                  // crc-16 - 16 bits
-                                  // filler - 16 bits of nothing (don't send)
-                                  0x30, 0x00, 0x00, 0x00, EPC, 0x00, 0x00, 0x00, 0x00};
+// ackReply:  First two bytes are the preamble.  Last two bytes are the crc.
+volatile unsigned char ackReply[]  = { 0x30, 0x00, EPC, 0x00, 0x00};
 
 // first 8 bits are the EPCGlobal identifier, followed by a 12-bit tag designer identifer (made up), followed by a 12-bit model number
 volatile unsigned char tid[] = { 0xE2, TID_DESIGNER_ID_AND_MODEL_NUMBER };
@@ -249,20 +256,22 @@ unsigned short TRcal=0;
 // processing frame-syncs/rtcal/trcals. however, the cmd buffer will contain pure packet
 // data.
 #if ENABLE_SLOTS
-#define NUM_QUERY_BITS          20
-#define MAX_NUM_QUERY_BITS      25
-#define NUM_QUERYADJ_BITS       9
-#define MAX_NUM_QUERYADJ_BITS   9
+#define NUM_QUERY_BITS          21
+#define NUM_READ_BITS           53  // 60 bits actually received, but need to break off early for computation
+#define MAX_NUM_READ_BITS       60
+#elif ENABLE_SESSIONS
+#define NUM_QUERY_BITS          21
 #define NUM_READ_BITS           53  // 60 bits actually received, but need to break off early for computation
 #define MAX_NUM_READ_BITS       60
 #else
 #define NUM_QUERY_BITS          24
-#define MAX_NUM_QUERY_BITS      25
-#define NUM_QUERYADJ_BITS       9
-#define MAX_NUM_QUERYADJ_BITS   9
 #define NUM_READ_BITS           55   // 60 bits actually received, but need to break off early for computation
 #define MAX_NUM_READ_BITS       60
 #endif
+#define MAX_NUM_QUERY_BITS      25
+#define NUM_QUERYADJ_BITS       9
+#define NUM_QUERYREP_BITS       5
+#define MAX_NUM_QUERYADJ_BITS   9
 #define NUM_ACK_BITS            20
 #define NUM_REQRN_BITS          41
 #define NUM_NAK_BITS            10
@@ -277,14 +286,11 @@ unsigned char subcarrierNum;
 unsigned char TRext;
 unsigned char delimiterNotFound;
 unsigned short ackReplyCRC, queryReplyCRC, readReplyCRC;
-#if ENABLE_SLOTS
 unsigned short Q = 0, slot_counter = 0, shift = 0;
-#endif
-unsigned int read_counter = 0, sensor_counter = 0;
+unsigned int read_counter = 0;
+unsigned int sensor_counter = 0;
 unsigned char timeToSample = 0;
 
-volatile unsigned short inSleepMode = 0;
-volatile unsigned short waitingForBits = 0;
 unsigned short inInventoryRound = 0;
 unsigned char last_handle_b0, last_handle_b1;
 
@@ -306,19 +312,20 @@ unsigned char session_table[] = { SESSION_STATE_A, SESSION_STATE_A, SESSION_STAT
 void initialize_sessions();
 void handle_session_timeout();
 inline int bitCompare(unsigned char *startingByte1, unsigned short startingBit1, unsigned char *startingByte2, unsigned short startingBit2, unsigned short len);
-
-#endif
-#if ENABLE_SLOTS
-void lfsr();
-inline void loadRN16(), mixupRN16();
 #endif
 
 void sendToReader(volatile unsigned char *data, unsigned char numOfBits);
 unsigned short crc16_ccitt(volatile unsigned char *data, unsigned short n);
+#if 0
 unsigned char crc5(volatile unsigned char *buf, unsigned short numOfBits);
+#endif
 void setup_to_receive();
 void sleep();
 unsigned short is_power_good();
+#if ENABLE_SLOTS
+void lfsr();
+inline void loadRN16(), mixupRN16();
+#endif
 void crc16_ccitt_readReply(unsigned int);
 int i;
 inline void handle_query(volatile short nextState);
@@ -332,13 +339,19 @@ inline void handle_nak(volatile short nextState);
 inline void do_nothing();
 
 #if READ_SENSOR
-#if USE_ACCEL_SENSOR
-#include "accel_sensor.h"
-#elif USE_TEMP_SENSOR
-#include "temp_sensor.h"
-#elif USE_NULL_SENSOR
-#include "null_sensor.h"
-#endif
+  #if (ACTIVE_SENSOR == SENSOR_ACCEL_QUICK)
+    #include "quick_accel_sensor.h"
+  #elif (ACTIVE_SENSOR == SENSOR_ACCEL)
+    #include "accel_sensor.h"
+  #elif (ACTIVE_SENSOR == SENSOR_INTERNAL_TEMP)
+    #include "int_temp_sensor.h"
+  #elif (ACTIVE_SENSOR == SENSOR_EXTERNAL_TEMP)
+	#error "SENSOR_EXTERNAL_TEMP not yet implemented"
+  #elif (ACTIVE_SENSOR == SENSOR_NULL)
+    #include "null_sensor.h"
+  #elif (ACTIVE_SENSOR == SENSOR_COMM_STATS)
+	#error "SENSOR_COMM_STATS not yet implemented"
+  #endif
 #endif
 
 int main(void)
@@ -352,32 +365,36 @@ int main(void)
   P1IE = 0;
   P1IFG = 0;
   P2IFG = 0;
-  P2IES = VOLTAGE_SV_ALT_PIN;
-#if SLEEP_AGGRESSIVELY
-  // VOLTAGE_SV_PIN fires when VS goes from low to high;
-  // VOLTAGE_SV_ALT_PIN fires when VS goes from high to low
-  P2IE |= (VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
-#else
-  P2IE |= VOLTAGE_SV_PIN;
-#endif
+
+  DRIVE_ALL_PINS // set pin directions correctly and outputs to low.
   
-#if !SIMULATE_SV_INTERRUPT
   // Check power on bootup, decide to receive or sleep.
   if(!is_power_good())
     sleep();
-#endif
   
   RECEIVE_CLOCK;
-  
+ 
+  /*
+  // already set.
+#if MONITOR_DEBUG_ON
+    // for monitor - pin direction
+  P1DIR |= wisp_debug_1;
+  P2DIR |= wisp_debug_2;
+  P3DIR |= wisp_debug_3;
+  P3DIR |= wisp_debug_4;
+  P3DIR |= wisp_debug_5;
+#endif
+  */
+
 #if DEBUG_PINS_ENABLED
 #if USE_2132
   DEBUG_PIN5_LOW;
-  P3DIR |= (BIT7+BIT5+BIT3);
+//  P3DIR |= (BIT5); // already set.
 #else
   P4DIR |= (BIT7+BIT5+BIT3);
 #endif
-#endif 
-  
+#endif
+
 #if ENABLE_SLOTS
   // setup int epc
   epc = ackReply[2]<<8;
@@ -402,42 +419,6 @@ int main(void)
 #endif
   
   TACTL = 0;
-  //TBCTL = 0;
-  
-#if DEBUG_PINS_ENABLED
-#if USE_2132
-#if 1
-  P3OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-  P3OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-  P3OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-  P3OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-  P3OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-  P3OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-  P3OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-  P3OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-  P3OUT &= ~BIT5;
-#endif
-#else
-  P4OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-  P4OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-  P4OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-  P4OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-  P4OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-  P4OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-  P4OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-  P4OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-  P4OUT &= ~BIT5;
-#endif
-#endif
-  
-  RECEIVE_CLOCK;
-
-  P1OUT = 0;
-  //P1DIR = 0xFF;               // by default all P1 pins are output
-  P1DIR &= ~ INPUT_PIN;
-  P1DIR |= BIT_IN_ENABLE;
-  //P2DIR = (BIT0+BIT1+BIT2+BIT3+BIT5);               // by default all P2 pins are output
-  //P2DIR &= ~VOLTAGE_SV_PIN;
 
 //  P1IES &= ~BIT2; // initial state is POS edge to find start of CW
 //  P1IFG = 0x00;       // clear interrupt flag after changing edge trigger
@@ -456,13 +437,7 @@ int main(void)
 #endif
   
 #if SENSOR_DATA_IN_ID
-  // this branch is for sensor data in the id. format for payload is:
-  // one-byte type flag, nine bytes for sensor data (fixed), then
-  // first two bytes of the epc code
-  ackReply[10] = ackReply[4];
-  ackReply[11] = ackReply[5];
-  ackReply[4] = 0x00;
-  ackReply[5] = 0x00;
+  // this branch is for sensor data in the id
   ackReply[2] = SENSOR_DATA_TYPE_ID;
   state = STATE_READ_SENSOR;
   timeToSample++;
@@ -478,6 +453,14 @@ int main(void)
   
   //state = STATE_ARBITRATE;
   state = STATE_READY;
+
+#if MONITOR_DEBUG_ON  
+  // for monitor - set STATE READY debug line - 00000 - 0
+  P1OUT |= wisp_debug_1;
+  P1OUT &= ~wisp_debug_1;
+  P2OUT &= ~wisp_debug_2;
+#endif
+  
   setup_to_receive();
   
   while (1)
@@ -489,15 +472,29 @@ int main(void)
       if(!is_power_good()) {
         sleep();
       }
+
+#if MONITOR_DEBUG_ON      
+      // for monitor - set TAR OVERFLOW debug line - 00111 - 7
+      if (!delimiterNotFound)
+      {
+        P1OUT |= wisp_debug_1;
+        P1OUT &= ~wisp_debug_1;
+        P2OUT &= ~wisp_debug_2;
+        P3OUT = 0x31;
+      }
+#endif
+      
 #if SENSOR_DATA_IN_ID
     // this branch is for sensor data in the id
       if ( timeToSample++ == 10 ) {
-      state = STATE_READ_SENSOR;
-      timeToSample = 0;
-    }
-    //else {z
-    //  state = STATE_ARBITRATE;
-    //}
+        state = STATE_READ_SENSOR;
+        timeToSample = 0;
+      }
+#elif SENSOR_DATA_IN_READ_COMMAND
+      if ( timeToSample++ == 10 ) {
+        state = STATE_READ_SENSOR;
+        timeToSample = 0;
+      }
 #else
 #if !(ENABLE_READS)
     if(!is_power_good()) 
@@ -505,6 +502,14 @@ int main(void)
 #endif
     inInventoryRound = 0;
     state = STATE_READY;
+    
+#if MONITOR_DEBUG_ON
+    // for monitor - set STATE READY debug line - 00000 - 0
+    P1OUT |= wisp_debug_1;
+    P1OUT &= ~wisp_debug_1;
+    P2OUT &= ~wisp_debug_2;
+#endif
+    
 #endif
 
 #if ENABLE_SESSIONS
@@ -529,17 +534,27 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
         //////////////////////////////////////////////////////////////////////
-#if ENABLE_SLOTS
-        if ( bits == 21  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
-#elif ENABLE_SESSIONS
-        if ( bits == 21  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )      
-#else
         if ( bits == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
-#endif
         {
+#if MONITOR_DEBUG_ON
+            // for monitor - set QUERY PKT debug line - 01001 - 9
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT |= wisp_debug_2;
+          P3OUT = 0x01;
+#endif
+          
           //DEBUG_PIN5_HIGH;
           handle_query(STATE_REPLY);
-          //DEBUG_PIN5_LOW;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set STATE REPLY debug line - 00010 - 2
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x10;
+#endif
+          
           setup_to_receive();
         }
         //////////////////////////////////////////////////////////////////////
@@ -548,6 +563,14 @@ int main(void)
         // @ short distance has slight impact on performance
         else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set QUERY_ADJ debug line - 01101 - 13
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT |= wisp_debug_2;
+          P3OUT = 0x30;
+#endif
           //DEBUG_PIN5_HIGH;
           handle_select(STATE_READY);
           //DEBUG_PIN5_LOW;
@@ -561,6 +584,14 @@ int main(void)
           do_nothing();
           state = STATE_READY;
           delimiterNotFound = 1;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set debug line - 01110 - 14
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x30;
+#endif
         }   
         break;
       }
@@ -569,17 +600,27 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
         //////////////////////////////////////////////////////////////////////
-#if ENABLE_SLOTS
-        if ( bits == 21  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
-#elif ENABLE_SESSIONS
-        if ( bits == 21  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )      
-#else
         if ( bits == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
-#endif
         {
+#if MONITOR_DEBUG_ON
+          // for monitor - set QUERY PKT debug line - 01001 - 9
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT |= wisp_debug_2;
+          P3OUT = 0x01;
+#endif
+          
           //DEBUG_PIN5_HIGH;
           handle_query(STATE_REPLY);
-          //DEBUG_PIN5_LOW;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set STATE REPLY debug line - 00010 - 2
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x10;
+#endif
+          
           setup_to_receive();
         }
         //////////////////////////////////////////////////////////////////////
@@ -592,19 +633,43 @@ int main(void)
           do_nothing();
           state = STATE_READY;
           delimiterNotFound = 1;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x30;
+#endif
+          
           //DEBUG_PIN5_LOW;
         }
         // this state handles query, queryrep, queryadjust, and select commands.
         //////////////////////////////////////////////////////////////////////
         // process the QUERYREP command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits == 4 && ( ( cmd[0] & 0x03 ) == 0x00 ) )
+        else if ( bits == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) )
         {
+#if MONITOR_DEBUG_ON
+          // for monitor - set QUERY_REP debug line - 01100 - 12
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT |= wisp_debug_2;
+          P3OUT = 0x20;
+#endif
           //DEBUG_PIN5_HIGH;
           handle_queryrep(STATE_REPLY);
           //DEBUG_PIN5_LOW;
           //setup_to_receive();
           delimiterNotFound = 1;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x30;
+#endif
         } // queryrep command
         //////////////////////////////////////////////////////////////////////
         // process the QUERYADJUST command
@@ -615,6 +680,15 @@ int main(void)
           // do setup_to_receive() rather than dnf =1. not sure that this holds
           // true at distance though - need to recheck @ 2-3 ms.
           //DEBUG_PIN5_HIGH;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set QUERY_ADJ debug line - 01101 - 13
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT |= wisp_debug_2;
+          P3OUT = 0x21;
+#endif
+          
           handle_queryadjust(STATE_REPLY);
           //DEBUG_PIN5_LOW;
           setup_to_receive();
@@ -626,13 +700,28 @@ int main(void)
         // @ short distance has slight impact on performance
         else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
+#if MONITOR_DEBUG_ON
+          // for monitor - set SELECT debug line - 01110 - 14
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT |= wisp_debug_2;
+          P3OUT = 0x30;
+#endif
+          
           //DEBUG_PIN5_HIGH;
           handle_select(STATE_READY);
           //DEBUG_PIN5_LOW;
           delimiterNotFound = 1;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x30;
+#endif
+          
         } // select command
-        
-        // FIXME: need disposal for acks sent for non-0 slot counters
        
       break;
       }
@@ -643,41 +732,48 @@ int main(void)
         ///////////////////////////////////////////////////////////////////////
         // process the ACK command
         ///////////////////////////////////////////////////////////////////////
-        // spec sez this is 18 bits -- where do the extra two bits come from?!?
         if ( bits == NUM_ACK_BITS  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
         {
+#if MONITOR_DEBUG_ON
+          // for monitor - set ACK PKT debug line - 01010 - 10
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT |= wisp_debug_2;
+          P3OUT = 0x10;
+#endif
 #if ENABLE_READS
-          //DEBUG_PIN5_HIGH;
           handle_ack(STATE_ACKNOWLEDGED);
-          //DEBUG_PIN5_LOW;
+
           setup_to_receive();
 #elif SENSOR_DATA_IN_ID
           handle_ack(STATE_ACKNOWLEDGED);
-          //handle_ack(STATE_READY);
-          // FIXME FIXME should be acknowledged
           delimiterNotFound = 1; // reset
 #else
           // this branch for hardcoded query/acks
-          //DEBUG_PIN5_HIGH;
           handle_ack(STATE_ACKNOWLEDGED);
-          //DEBUG_PIN5_LOW;
           //delimiterNotFound = 1; // reset
           setup_to_receive();
+#endif
+#if MONITOR_DEBUG_ON
+          // for monitor - set STATE ACK debug line - 00011 - 3
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x11;
 #endif
         }
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
         //////////////////////////////////////////////////////////////////////
-        //else if ( bits == 20  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
-        // STOP!!!! do not change this lightly!!!!!!!!!!!!
-#if ENABLE_SLOTS
-        if ( bits == 21  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
-#elif ENABLE_SESSIONS
-        if ( bits == 21  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )      
-#else
         if ( bits == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
-#endif
         {
+#if MONITOR_DEBUG_ON
+          // for monitor - set QUERY PKT debug line - 01001 - 9
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT |= wisp_debug_2;
+          P3OUT = 0x01;
+#endif
           // i'm supposed to stay in state_reply when I get this, but if I'm
           // running close to 1.8v then I really need to reset and get in the
           // sleep, which puts me back into state_arbitrate. this is complete
@@ -692,11 +788,28 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYREP command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits == 4 && ( ( cmd[0] & 0x03 ) == 0x00 ) )
+        else if ( bits == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) )
         {
+#if MONITOR_DEBUG_ON
+          // for monitor - set QUERY_REP debug line - 01100 - 12
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT |= wisp_debug_2;
+          P3OUT = 0x20;
+#endif
+          
           //DEBUG_PIN5_HIGH;
 	  do_nothing();
 	  state = STATE_ARBITRATE;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set STATE ARBITRATE debug line - 00001 - 1
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x01;
+#endif
+          
           //handle_queryrep(STATE_ARBITRATE);
           //DEBUG_PIN5_LOW;
           setup_to_receive();
@@ -707,25 +820,54 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
           else if ( bits == NUM_QUERYADJ_BITS  && ( ( cmd[0] & 0xF8 ) == 0x48 ) )
         {
+#if MONITOR_DEBUG_ON
+          // for monitor - set QUERY_ADJ debug line - 01101 - 13
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT |= wisp_debug_2;
+          P3OUT = 0x21;
+#endif
           //DEBUG_PIN5_HIGH;
           handle_queryadjust(STATE_REPLY);
           //DEBUG_PIN5_LOW;
           //setup_to_receive();
           delimiterNotFound = 1;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x30;
+#endif
+          
         } // queryadjust command
-        // (maybe fixed?)
-        // FIXME FIXME - if this is enabled is completely KILLS performance
-        // @ 18 inches - 50 t/s if commented out
-        // 8 t/s if dnf = 1 15 t/s if setup_to_receive()
         //////////////////////////////////////////////////////////////////////
         // process the SELECT command
         //////////////////////////////////////////////////////////////////////
         else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
+#if MONITOR_DEBUG_ON
+          // for monitor - set SELECT debug line - 01110 - 14
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT |= wisp_debug_2;
+          P3OUT = 0x30;
+#endif
+          
           //DEBUG_PIN5_HIGH;
           handle_select(STATE_READY); 
           //DEBUG_PIN5_LOW;
           delimiterNotFound = 1;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x30;
+#endif
+          
           //setup_to_receive();
         } // select command
         else if ( bits >= MAX_NUM_QUERY_BITS && ( ( cmd[0] & 0xF0 ) != 0xA0 ) && ( ( cmd[0] & 0xF0 ) != 0x80 ) )
@@ -745,18 +887,31 @@ int main(void)
         /////////////////////////////////////////////////////////////////////
         // process the REQUEST_RN command
         //////////////////////////////////////////////////////////////////////
-        // FIXME FIXME - why 42 instead of 40?!?
         if ( bits >= NUM_REQRN_BITS && ( cmd[0] == 0xC1 ) )
-        //if ( bits >= 40  && ( cmd[0] == 0xC1 ) )
         {
 #if 1
-          //DEBUG_PIN5_HIGH;
+#if MONITOR_DEBUG_ON
+          // for monitor - set REQ_RN debug line - 01011 - 11
+    P1OUT |= wisp_debug_1;
+    P1OUT &= ~wisp_debug_1;
+    P2OUT |= wisp_debug_2;
+    P3OUT = 0x11;
+#endif
+          DEBUG_PIN5_HIGH;
           handle_request_rn(STATE_OPEN);
-          //DEBUG_PIN5_LOW;
+          DEBUG_PIN5_LOW;
           setup_to_receive();
 #else
           handle_request_rn(STATE_READY);
           delimiterNotFound = 1;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x30;
+#endif
 #endif
         }
         
@@ -764,18 +919,28 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
         //////////////////////////////////////////////////////////////////////
-#if ENABLE_SLOTS
-        if ( bits == 21  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
-#elif ENABLE_SESSIONS
-        if ( bits == 21  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )      
-#else
         if ( bits == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
-#endif
         {
+#if MONITOR_DEBUG_ON
+              // for monitor - set QUERY PKT debug line - 01001 - 9
+    P1OUT |= wisp_debug_1;
+    P1OUT &= ~wisp_debug_1;
+    P2OUT |= wisp_debug_2;
+    P3OUT = 0x01;
+#endif
           //DEBUG_PIN5_HIGH;
           handle_query(STATE_REPLY);
           //DEBUG_PIN5_LOW;
           delimiterNotFound = 1;
+          
+#if MONITOR_DEBUG_ON
+          // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
+          P1OUT |= wisp_debug_1;
+          P1OUT &= ~wisp_debug_1;
+          P2OUT &= ~wisp_debug_2;
+          P3OUT = 0x30;
+#endif
+          
           //setup_to_receive();
         }
         ///////////////////////////////////////////////////////////////////////
@@ -787,22 +952,36 @@ int main(void)
         //else if ( bits == 20  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
         else if ( bits == NUM_ACK_BITS  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
         {
+#if MONITOR_DEBUG_ON
+              // for monitor - set ACK PKT debug line - 01010 - 10
+    P1OUT |= wisp_debug_1;
+    P1OUT &= ~wisp_debug_1;
+    P2OUT |= wisp_debug_2;
+    P3OUT = 0x10;
+#endif
           //DEBUG_PIN5_HIGH;
           handle_ack(STATE_ACKNOWLEDGED);
+          
+#if MONITOR_DEBUG_ON
+              // for monitor - set STATE ACK debug line - 00011 - 3
+    P1OUT |= wisp_debug_1;
+    P1OUT &= ~wisp_debug_1;
+    P2OUT &= ~wisp_debug_2;
+    P3OUT = 0x11;
+#endif
+          
           //DEBUG_PIN5_LOW;
           setup_to_receive();
         }
         //////////////////////////////////////////////////////////////////////
         // process the QUERYREP command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits == 4 && ( ( cmd[0] & 0x03 ) == 0x00 ) )
+        else if ( bits == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) )
         {
           // in the acknowledged state, rfid chips don't respond to queryrep commands
-          //DEBUG_PIN5_HIGH;
           do_nothing();
-          state = STATE_READY; // a terrible idea that kills reads ...
+          state = STATE_READY; 
           delimiterNotFound = 1;
-          //DEBUG_PIN5_LOW;
         } // queryrep command
 
         //////////////////////////////////////////////////////////////////////
@@ -812,7 +991,7 @@ int main(void)
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
-          state = STATE_READY; // a terrible idea that kills reads ...
+          state = STATE_READY; 
           delimiterNotFound = 1;
           //DEBUG_PIN5_LOW;
         } // queryadjust command
@@ -863,7 +1042,6 @@ int main(void)
           //DEBUG_PIN5_LOW;
         }
 #endif
-        //else if ( bits == 9999 )
         else if ( bits >= MAX_NUM_READ_BITS )
         {
           //DEBUG_PIN5_HIGH;
@@ -905,34 +1083,23 @@ int main(void)
         else if ( bits >= NUM_REQRN_BITS  && ( cmd[0] == 0xC1 ) )
           //else if ( bits >= 30  && ( cmd[0] == 0xC1 ) )
         {
-          //DEBUG_PIN5_HIGH;
           handle_request_rn(STATE_OPEN);
           setup_to_receive();
-          //DEBUG_PIN5_HIGH;
           //delimiterNotFound = 1; // more bad reads??
          }
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
         //////////////////////////////////////////////////////////////////////
-#if ENABLE_SLOTS
-        if ( bits == 21  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
-#elif ENABLE_SESSIONS
-        if ( bits == 21  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )      
-#else
         if ( bits == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
-#endif
-        //else if ( bits >= 16  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
         {
-          //DEBUG_PIN5_HIGH;
           handle_query(STATE_REPLY);
           //setup_to_receive();
           delimiterNotFound = 1;
-          //DEBUG_PIN5_LOW;
         }
         //////////////////////////////////////////////////////////////////////
         // process the QUERYREP command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits == 4 && ( ( cmd[0] & 0x03 ) == 0x00 ) ) 
+        else if ( bits == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) ) 
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
@@ -956,7 +1123,6 @@ int main(void)
         ///////////////////////////////////////////////////////////////////////
         // process the ACK command
         ///////////////////////////////////////////////////////////////////////
-        //else if ( bits >= 18  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
         else if ( bits == NUM_ACK_BITS  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
         {
           //DEBUG_PIN5_HIGH;
@@ -970,94 +1136,39 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
-          //DEBUG_PIN5_HIGH;
           handle_select(STATE_READY); 
           delimiterNotFound = 1;
-          //DEBUG_PIN5_LOW;
         } // select command
-#if 1
         //////////////////////////////////////////////////////////////////////
         // process the NAK command
         //////////////////////////////////////////////////////////////////////
         //else if ( bits >= NUM_NAK_BITS && ( cmd[0] == 0xC0 ) )
         else if ( bits >= 10 && ( cmd[0] == 0xC0 ) )
         {
-          //DEBUG_PIN5_HIGH;
           handle_nak(STATE_ARBITRATE); 
           delimiterNotFound = 1;
-          //DEBUG_PIN5_LOW;
         }
-#else
-#if 1
-        else if ( bits > MAX_NUM_READ_BITS )
-        //else if ( bits >= 57 )
-        //else if ( bits >= 8 &&  ( cmd[0] != 0xC1 ) && (cmd[0] != 0xC2) && ( cmd[0] != 0xC0)  )
-        {
-          //DEBUG_PIN5_HIGH;
-          do_nothing();
-          state = STATE_ARBITRATE;
-          delimiterNotFound = 1;
-          //DEBUG_PIN5_LOW;
-        }
-#else
-        if ( bits > 16  && ( ( cmd[0] & 0xC0 ) == 0x80 ) ) {
-          //DEBUG_PIN5_HIGH;
-          do_nothing();
-          state = STATE_ARBITRATE;
-          delimiterNotFound = 1;
-          //DEBUG_PIN5_LOW;
-        }
-        // get 60 bits with impinj, but need to break off
-        // early to do computation
-        //else if ( bits > 16 && cmd[0] == 0xC2 ) {
-        else if ( bits == 56 && cmd[0] == 0xC2 ) {
-          //DEBUG_PIN5_HIGH;
-          //do_nothing();
-          handle_read(STATE_OPEN);
-          state = STATE_ARBITRATE;
-          delimiterNotFound = 1;
-          //DEBUG_PIN5_LOW;
-        }
-        
-        else if ( bits > (58 + 2) ) {
-          do_nothing();
-          state = STATE_ARBITRATE;
-          delimiterNotFound = 1;
-        }
-#endif
-#endif
 
         break;
       }
     
     case STATE_READ_SENSOR:
-      {
-        
+      {      
 #if SENSOR_DATA_IN_READ_COMMAND
-        waitingForBits = 0;
         read_sensor(&readReply[0]);
-        waitingForBits = 1;
         // crc is computed in the read state
         RECEIVE_CLOCK;
         state = STATE_READY;  
         delimiterNotFound = 1; // reset
 #elif SENSOR_DATA_IN_ID
-        //DEBUG_PIN5_HIGH;
-        //waitingForBits = 0;
         read_sensor(&ackReply[3]);
-        //waitingForBits = 1;
-        //DEBUG_PIN5_LOW;
         RECEIVE_CLOCK;
         ackReplyCRC = crc16_ccitt(&ackReply[0], 14);
         ackReply[15] = (unsigned char)ackReplyCRC;
         ackReply[14] = (unsigned char)__swap_bytes(ackReplyCRC);
-        //state = STATE_ARBITRATE;
         state = STATE_READY;
         delimiterNotFound = 1; // reset
 #endif
-        
-        //state = STATE_ARBITRATE;  
-        //delimiterNotFound = 1; // reset
         
         break;
       } // end case  
@@ -1070,14 +1181,17 @@ inline void handle_query(volatile short nextState)
 {
   TAR = 0;
 #if (!ENABLE_SLOTS)  && (!ENABLE_SESSIONS)
-  //if ( NUM_QUERY_BITS == 22 )
     while ( TAR < 90 ); // if bit test is 22
-  //P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
+  //P1OUT &= ~RX_EN_PIN;   // turn off comparator
   TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
   TAR = 0;
 #elif (!ENABLE_SLOTS) && ENABLE_SESSIONS
   while ( TAR < 160 ); // if bit test is 22
-  //P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
+  //P1OUT &= ~RX_EN_PIN;   // turn off comparator
+  TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
+  TAR = 0;
+#else
+  //P1OUT &= ~RX_EN_PIN;   // turn off comparator
   TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
   TAR = 0;
 #endif
@@ -1127,10 +1241,10 @@ inline void handle_query(volatile short nextState)
 
 // command-specific bit flags
 #define QUERY_SEL_SL 		0xC0
-#define QUERY_SEL_NOTSL 	0x40
+#define QUERY_SEL_NOTSL 	0x80
 
   unsigned short sel = cmd[1] & QUERY_SEL_MASK;
-  unsigned short session = cmd[1] & (QUERY_SESSION_MASK) >> 4;
+  unsigned short session = (cmd[1] & QUERY_SESSION_MASK) >> 4;
   unsigned short target = cmd[1] & QUERY_TARGET_MASK;
   unsigned short match = 0;
   
@@ -1222,8 +1336,8 @@ inline void handle_query(volatile short nextState)
     queryReply[2] = (unsigned char)__swap_bytes(queryReplyCRC);
     
 #if ENABLE_HANDLE_CHECKING
-    last_handle_b0 = queryReply[0];
-    last_handle_b1 = queryReply[1];
+    //last_handle_b0 = queryReply[0];
+    //last_handle_b1 = queryReply[1];
 #endif
     
     TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
@@ -1236,7 +1350,6 @@ inline void handle_query(volatile short nextState)
     
     // mix up the RN16 table a bit for next time
     mixupRN16();
-    
   }
 
   // slot counter isn't 0, so we don't send a reply. We wait for a
@@ -1255,8 +1368,8 @@ inline void handle_query(volatile short nextState)
 #else
 
 #if ENABLE_HANDLE_CHECKING
-  last_handle_b0 = queryReply[0];
-  last_handle_b1 = queryReply[1];
+  //last_handle_b0 = queryReply[0];
+  //last_handle_b1 = queryReply[1];
 #endif
   
   // we don't care about slots, so just send the packet and go to STATE_REPLY.
@@ -1269,17 +1382,18 @@ inline void handle_query(volatile short nextState)
 }
 
 // Word to the wise: I've been testing this code against the Impinj RFIDemo, using
-// the InventoryFilter page. I've noticed that it only sends the first three bytes
+// the InventoryFilter page. It appears to me that it only sends the first three bytes
 // pattern fields (aka the mask field in the spec) correctly. So don't expect it
-// to be able to look for (say) entire EPCs correctly.
+// to be able to look for (say) entire EPCs correctly. Also, when testing this code
+// out in RFIDDemo, put your mask data in hex in the leftmost part of the pattern
+// field.
 inline void handle_select(volatile short nextState)
 {
   do_nothing();
   
 //DEBUG_PIN5_HIGH;
 
-#if 0
-//#if ENABLE_SESSIONS
+#if ENABLE_SESSIONS
 // command-specific bit masks
 #define SELECT_TARGET_MASK		0x0E
 #define SELECT_ACTIONB0_MASK		0x01
@@ -1327,13 +1441,13 @@ inline void handle_select(volatile short nextState)
   if ( membank == 0x01 )
   {
     // match on epc
-    // FIXME - should do bounds check
+    if ( sourcebyteoffset >= 8 ) return;
     sourcebyte = (unsigned char *)&ackReply[2] + sourcebyteoffset;
   }
   else if ( membank == 0x02 )
   {
     // matching on tid. 
-    // FIXME - should do a bounds check
+    if ( sourcebyteoffset >= 3 ) return;
     sourcebyte = (unsigned char *)&tid[0] + sourcebyteoffset;
   }
   else
@@ -1395,50 +1509,47 @@ inline void handle_select(volatile short nextState)
 	default:
 		break;
   }
-  
-#else
-
-  /***
-  SL = SL_ASSERTED;
-  session_table[0] = SESSION_STATE_A;
-  session_table[1] = SESSION_STATE_A;
-  session_table[2] = SESSION_STATE_A;
-  session_table[3] = SESSION_STATE_A;
-  **/
-
 
 #endif
   
   state = nextState;
-  //DEBUG_PIN5_LOW;
+  DEBUG_PIN5_LOW;
 }
 
 inline void handle_queryrep(volatile short nextState)
 {
-  
-  //DEBUG_PIN5_HIGH;
-  //DEBUG_PIN5_LOW;
-  
+   
   TAR = 0;
 #if (!ENABLE_SESSIONS)
   while ( TAR < 150 );
 #endif
-  //P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
+  //P1OUT &= ~RX_EN_PIN;   // turn off comparator
   TACCTL1 &= ~CCIE; 
   TAR = 0;
-
-#if 0
-//#if ENABLE_SESSIONS
+  
+#if ENABLE_SESSIONS
 
 // command-specific bit masks
-#define QUERYREP_SESSION_MASK	0x30
-  unsigned short session = (cmd[0] & QUERYREP_SESSION_MASK) >> 4;
+#define QUERYREP_UPDNB0_MASK	0x01	
+#define QUERYREP_UPDNB1_MASK	0x80
+  
+  // fyi, unless i'm missing something, the impinj reader doesn't always send
+  // correct session values. for now i will comment this section out, until
+  // i can test against a different reader firmware rev
+#if 0
+  unsigned char session = (cmd[0] & QUERYREP_UPDNB0_MASK) << 1;
+  unsigned char tmp = (cmd[1] & QUERYREP_UPDNB1_MASK) >> 7;
+  session |= tmp;
 
   if ( session != previous_session )
   {
 	// drop the packet
 	return;
   }
+#else
+  // hack hack hack
+  unsigned char session = previous_session;
+#endif
 
   if ( state == STATE_ACKNOWLEDGED || state == STATE_OPEN || state == STATE_SECURED ) 
   {
@@ -1451,16 +1562,11 @@ inline void handle_queryrep(volatile short nextState)
 
 #if ENABLE_SLOTS
   slot_counter -= 1;
-  //DEBUG_PIN5_HIGH;
   if ( slot_counter != 0 )
   {
-    //DEBUG_PIN5_HIGH;
     state = STATE_ARBITRATE;
-    //DEBUG_PIN5_LOW;
     return;
   }
-  //DEBUG_PIN5_HIGH;
-  //DEBUG_PIN5_LOW;
 #endif
   sendToReader(&queryReply[0], 17);
   state = nextState;
@@ -1469,24 +1575,20 @@ inline void handle_queryrep(volatile short nextState)
 inline void handle_queryadjust(volatile short nextState)
 {
   
-  //DEBUG_PIN5_HIGH;
-  //DEBUG_PIN5_LOW;
-  
   TAR = 0;
 #if !(ENABLE_SLOTS) && !(ENABLE_SESSIONS)
   while ( TAR < 300 );
-  //P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
+  //P1OUT &= ~RX_EN_PIN;   // turn off comparator
   TACCTL1 &= ~CCIE; 
   TAR = 0;
 #endif
 
-#if 0
-//#if ENABLE_SESSIONS
+#if ENABLE_SESSIONS
 
 // command-specific bit masks
 #define QUERYADJ_SESSION_MASK	0x0C
 
-  unsigned short session = cmd[0] & QUERYADJ_SESSION_MASK;
+  unsigned short session = (cmd[0] & QUERYADJ_SESSION_MASK) >> 1;
 
   if ( session != previous_session )
   {
@@ -1518,18 +1620,21 @@ inline void handle_queryadjust(volatile short nextState)
   
   //DEBUG_PIN5_HIGH;
 
-  // I actually get 10 bits here; a leading zero is prepended
-  // in the cmd field. i cheat a little by figuring out the updn value by
-  // looking at just the first two bits of the field.
-  unsigned char updn = (cmd[0] & QUERYADJ_UPDNB0_MASK) << 1;
-  unsigned char tmp = (cmd[1] & QUERYADJ_UPDNB1_MASK) >> 7;
+  unsigned char updn = (cmd[0] & QUERYADJ_UPDNB0_MASK) << 2;
+  unsigned char tmp = (cmd[1] & QUERYADJ_UPDNB1_MASK) >> 6;
   updn |= tmp;
 
   if ( Q == 0xf && updn == 0x3 ) updn = 0x0;
   if ( Q == 0x0 && updn == 0x1 ) updn = 0x0;
 
-  if ( updn == 0x3 ) Q += 1;
-  if ( updn == 0x1 ) Q -= 1;
+  if ( updn == 0x6 ) Q += 1;
+  else if ( updn == 0x3 ) Q -= 1;
+  else if ( updn != 0x0 )
+  {
+    // impinj likes to send me plenty of updn values of 0x01, which isn't
+    // valid. Spec says to ignore the command in these cases.
+    return;
+  }
 
   // pick Q randomly
   slot_counter = Q >> shift;
@@ -1575,7 +1680,6 @@ inline void handle_queryadjust(volatile short nextState)
 
 inline void handle_ack(volatile short nextState)
 {
-  //DEBUG_PIN5_HIGH;
   TACCTL1 &= ~CCIE;
   TAR = 0;
   if ( NUM_ACK_BITS == 20 )
@@ -1585,27 +1689,26 @@ inline void handle_ack(volatile short nextState)
   TAR = 0;
   
 #if ENABLE_HANDLE_CHECKING
-  unsigned char ack_b0 = ((last_handle_b0 & 0xFC) >> 2) ;
-  ack_b0 |= 0x40;
-  unsigned char ack_b1 = ((last_handle_b1 & 0xFC) >> 2);
-  ack_b1 = ack_b1 || (last_handle_b0 & 0x03) << 6;
-  unsigned char ack_b2 = ((last_handle_b1 & 0x03) << 6);
+  //unsigned char ack_b0 = ((last_handle_b0 & 0xFC) >> 2) ;
+  //ack_b0 |= 0x40;
+  //unsigned char ack_b1 = ((last_handle_b1 & 0xFC) >> 2);
+  //ack_b1 = ack_b1 || (last_handle_b0 & 0x03) << 6;
+  //unsigned char ack_b2 = ((last_handle_b1 & 0x03) << 6);
   
-  if ( ack_b0 != cmd[0] || ack_b1 != cmd[1] || ack_b2 != (cmd[2] & 0xC0) )
-      return; 
+  //if ( ack_b0 != cmd[0] || ack_b1 != cmd[1] || ack_b2 != (cmd[2] & 0xC0) )
+  //    return; 
 #endif
-  //P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
+  //P1OUT &= ~RX_EN_PIN;   // turn off comparator
   // after that sends tagResponse
   sendToReader(&ackReply[0], 129);
   state = nextState;
-  //DEBUG_PIN5_LOW;
 }
 
 inline void do_nothing()
 {
   TACCTL1 &= ~CCIE;
   TAR = 0;
-  //P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
+  //P1OUT &= ~RX_EN_PIN;   // turn off comparator
 }
 
 inline void handle_request_rn(volatile short nextState)
@@ -1626,7 +1729,7 @@ inline void handle_request_rn(volatile short nextState)
   // the bit buffer got overwritten. as far as I can tell, it hasn't, and there's
   // plenty of room in the receiving buffer. theory #3 disproven.
   // hmmm.
-  //P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
+  //P1OUT &= ~RX_EN_PIN;   // turn off comparator
   if ( NUM_REQRN_BITS == 42 )
     while ( TAR < 80 );
   else if ( NUM_REQRN_BITS == 41 )
@@ -1639,35 +1742,26 @@ inline void handle_request_rn(volatile short nextState)
 
 inline void handle_read(volatile short nextState)
 {
-            
+     
 #if SENSOR_DATA_IN_READ_COMMAND
   
+  //P1OUT &= ~RX_EN_PIN;   // turn off comparator
   TACCTL1 &= ~CCIE;
   TAR = 0;
   
-  readReply[DATA_LENGTH_IN_BYTES] = 0xf0;        // remember to restore correct RN before doing crc()
-  readReply[DATA_LENGTH_IN_BYTES+1] = 0x0f;        // because crc() will shift bits to add
+  readReply[DATA_LENGTH_IN_BYTES] = queryReply[0];        // remember to restore correct RN before doing crc()
+  readReply[DATA_LENGTH_IN_BYTES+1] = queryReply[1];        // because crc() will shift bits to add
   crc16_ccitt_readReply(DATA_LENGTH_IN_BYTES);    // leading "0" bit.
-            
-  //while ( TAR < 800 ); 
-  //P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
-  TAR = 0;
-            
-  // 48 bits for data + 16 bits for the handle + 16 bits for the CRC + leading 0 + add one to number of bits for seong's xmit code
-  sendToReader(&readReply[0], 82);
-  // this branch is for sensor data in read command
-  state = STATE_READ_SENSOR;
-  //delimiterNotFound = 1;
+   
+  // DATA_LENGTH_IN_BYTES*8 bits for data + 16 bits for the handle + 16 bits for the CRC + leading 0 + add one to number of bits for xmit code
+  sendToReader(&readReply[0], ((DATA_LENGTH_IN_BYTES*8)+16+16+1+1));
+  state = nextState;
+  delimiterNotFound = 1;
             
 #elif SIMPLE_READ_COMMAND
 
-  //TACCTL1 &= ~CCIE;
-  TAR = 0;
-#if ENABLE_SLOTS
-  while ( TAR < 0x55 );
-#else
-#endif
-  while ( TAR < 0x25 );
+  //P1OUT &= ~RX_EN_PIN;   // turn off comparator
+  TACCTL1 &= ~CCIE;
   TAR = 0;
   
 #define USE_COUNTER 1
@@ -1681,10 +1775,6 @@ inline void handle_read(volatile short nextState)
   readReply[2] = queryReply[0];        // remember to restore correct RN before doing crc()
   readReply[3] = queryReply[1];        // because crc() will shift bits to add
   crc16_ccitt_readReply(2);    // leading "0" bit.
-            
-  //P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
-  TACCTL1 &= ~CCIE;
-  TAR = 0;
             
   // after that sends tagResponse
   // 16 bits for data + 16 bits for the handle + 16 bits for the CRC + leading 0 + add one to number of bits for seong's xmit code
@@ -1712,7 +1802,7 @@ inline void setup_to_receive()
   //P4OUT &= ~BIT3;
   _BIC_SR(GIE); // temporarily disable GIE so we can sleep and enable interrupts at the same time
   
-  P1OUT |= BIT_IN_ENABLE;
+  P1OUT |= RX_EN_PIN;
   
   delimiterNotFound = 0;
   // setup port interrupt on pin 1.2
@@ -1733,256 +1823,72 @@ inline void setup_to_receive()
   asm("CLR R6");
   
   P1IE = 0;
-  P1IES &= ~INPUT_PIN; // Make positive edge for port interrupt to detect start of delimiter
+  P1IES &= ~RX_PIN; // Make positive edge for port interrupt to detect start of delimiter
   P1IFG = 0;  // Clear interrupt flag
             
-  P1IE  |= INPUT_PIN; // Enable Port1 interrupt
-#if SLEEP_AGGRESSIVELY
-  // VOLTAGE_SV_PIN fires when VS goes from low to high;
-  // VOLTAGE_SV_ALT_PIN fires when VS goes from high to low
-  P2IE |= (VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
-#else
-  P2IE |= VOLTAGE_SV_PIN;
-#endif
-  
-  //if ( (P1OUT & BIT_IN_ENABLE ) != BIT_IN_ENABLE  )
-  //if ( (P1IE & INPUT_PIN ) != INPUT_PIN  )
-  //{
-  //P4OUT |= BIT7;
-  //}
-  //else
-  //{
-  //    P4OUT &= ~BIT7;
-  //}
-  
-  //P4OUT |= BIT7;
-  //P4OUT |= BIT3;
-  waitingForBits = 1;
+  P1IE  |= RX_PIN; // Enable Port1 interrupt
   _BIS_SR(LPM4_bits | GIE);
-  waitingForBits = 0;
-  //P4OUT &= ~BIT7;
   return;
 }
 
 inline void sleep()
 {
+  P1OUT &= ~RX_EN_PIN;
 
-  int i;
-  
-  _BIC_SR(GIE);
-  
-#if SIMULATE_SV_INTERRUPT
-  P1IES &= ~FAKE_VOLTAGE_SV_PIN;
-  P1IFG &= ~FAKE_VOLTAGE_SV_PIN;
-  P1IE |= FAKE_VOLTAGE_SV_PIN;
+#if MONITOR_DEBUG_ON
+  // for monitor - set SLEEP debug line - 01000 - 8
+  P1OUT |= wisp_debug_1;
+  P1OUT &= ~wisp_debug_1;
+  P2OUT |= wisp_debug_2;
+  P3OUT = 0x00;
 #endif
   
-  P1OUT &= ~BIT_IN_ENABLE;
-
-#if !(SIMULATE_SV_INTERRUPT)
   // enable port interrupt for voltage supervisor
-  //P2IES = 0;
-  //P2IFG = 0;
-  //  P2IFG = 0;
-  //P2IE |= (VOLTAGE_SV_PIN);
-  //P2IES |= VOLTAGE_SV_ALT_PIN;
-  //P2IE |= (VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
-  P2IFG &= ~(VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
-#if SLEEP_AGGRESSIVELY
-  // only allow vs ints that tell me we have enough power
-  P2IE &= ~VOLTAGE_SV_ALT_PIN;
-#endif
+  P2IES = 0;
+  P2IFG = 0;
+  P2IE |= VOLTAGE_SV_PIN;
   P1IE = 0;
   P1IFG = 0;
-#endif
-  
   TACTL = 0;
-  inSleepMode = 1;
   
-#if !SIMULATE_SV_INTERRUPT
-  _BIS_SR(GIE);
-  if (is_power_good()) {
-    P2IFG &= ~(VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
-    //_BIS_SR(GIE);
-    //P2IFG |= VOLTAGE_SV_PIN;
-    inSleepMode = 0;
-    P1IE |= INPUT_PIN;
-    P1OUT |= BIT_IN_ENABLE;
-    return;
-  }
-#endif
+  _BIC_SR(GIE); // temporarily disable GIE so we can sleep and enable interrupts at the same time
+  P2IE |= VOLTAGE_SV_PIN; // Enable Port2 interrupt
+  
+  if (is_power_good())
+    P2IFG = VOLTAGE_SV_PIN;
   
   _BIS_SR(LPM4_bits | GIE);
 
-  _BIC_SR(GIE);
-#if SLEEP_AGGRESSIVELY
-  P2IE |= VOLTAGE_SV_ALT_PIN;
-#endif
-  inSleepMode = 0;
-  P1IE |= INPUT_PIN;
-  P1OUT |= BIT_IN_ENABLE;
-  _BIS_SR(GIE);
-    
+//  P1OUT |= RX_EN_PIN;
   return;
 }
 
 unsigned short is_power_good()
 {
-#if SIMULATE_SV_INTERRUPT
-  if ( ++power_counter < 2) return 1;
-  power_counter = 0; return 0;
-#else
   return P2IN & VOLTAGE_SV_PIN;
-#endif
 }
 
 
+//*************************************************************************
 //************************ PORT 2 INTERRUPT *******************************
 
 // Pin Setup :
 // Description : Port 2 interrupt wakes on power good signal from supervisor.
 
-#if !(SIMULATE_SV_INTERRUPT)
 #pragma vector=PORT2_VECTOR
 __interrupt void Port2_ISR(void)   // (5-6 cycles) to enter interrupt
-{
-  
-  // page 2-11 of the x2xx family user's guide:
-  //  "Interrupt nesting is enabled if the GIE bit is set inside an interrupt
-  //  service route. When interrupt nesting is enabled, any interrupt occurring
-  //  during an interrupt service routine will interrupt the routine, regardless
-  //  of the interrupt priorities."
-#if READ_SENSOR
-  if ( is_sensor_sampling() ) 
-  {
-    		// this is an orderly wake out of sleep mode
-    		P2IFG &= ~(VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
-    		P1IFG = 0;
-    		P1IE = 0;
-    		//TACTL = 0;
-    		//TACCTL0 = 0;
-    		//TACCTL1 = 0;
-    		//TAR = 0;
-    		//state = STATE_ARBITRATE;
-                inSleepMode = 0;
-                //P1IE |= INPUT_PIN;
-                //P1OUT |= BIT_IN_ENABLE;
-                //P4OUT &= ~BIT7;
-    		//LPM4_EXIT;
-                // reenable interrupts
-                //P2IE |= VOLTAGE_SV_ALT_PIN;
-                //_BIS_SR(GIE);
-                                // force a PUC
-		WDTCTL = 0;
-                return;
-  }
-#endif
-  _BIC_SR(GIE);
-  //P1IE  &= ~INPUT_PIN;
-  //P2IE &= ~VOLTAGE_SV_ALT_PIN;
-
-  if ( ( P2IFG & VOLTAGE_SV_PIN ) == VOLTAGE_SV_PIN )
-  {
-	// VS pin went from low to high --
-  	if ( inSleepMode ) 
-	{
-		// this is an orderly wake out of sleep mode
-    		P2IFG &= ~(VOLTAGE_SV_PIN + VOLTAGE_SV_ALT_PIN);
-    		P1IFG = 0;
-    		P1IE = 0;
-    		TACTL = 0;
-    		TACCTL0 = 0;
-    		TACCTL1 = 0;
-    		TAR = 0;
-    		state = STATE_ARBITRATE;
-                inSleepMode = 0;
-                P1IE |= INPUT_PIN;
-                P1OUT |= BIT_IN_ENABLE;
-                //P4OUT &= ~BIT7;
-    		LPM4_EXIT;
-                // reenable interrupts
-                //P2IE |= VOLTAGE_SV_ALT_PIN;
-                _BIS_SR(GIE);
-  	}
-	else 
-	{
-		// this is an unexpected interrupt -- we never got the chance 
-		// to drop into LPM4 before running out of power. Reset to recover.
-#if DEBUG_PINS_ENABLED
-#if USE_2132
-                P3OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT &= ~BIT5;
-		P3OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P3OUT &= ~BIT5;
-#else
-		P4OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT &= ~BIT5;
-		P4OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT |= BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT &= ~BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT &= ~BIT7; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT |= BIT5; for ( i = 0 ; i < 0xff ; i++ );
-		P4OUT &= ~BIT5;
-#endif
-#endif
-                // force a PUC
-		WDTCTL = 0;
-  	}
-  }
-  else if ( ( P2IFG & VOLTAGE_SV_ALT_PIN ) == VOLTAGE_SV_ALT_PIN )
-  {
-	// VS went from high to low - force us to go to sleep in main loop
-        DEBUG_PIN5_HIGH;
-    	P2IFG &= ~VOLTAGE_SV_ALT_PIN;
-#if SLEEP_AGGRESSIVELY
-	delimiterNotFound = 1;
-        LPM4_EXIT;
-        P1IE |= INPUT_PIN;
-        // GIE bit will be reenabled as a side effect of the trip
-        // through the delimiterNotFound == 1 loop
-        if ( waitingForBits == 1 ) {
-          _BIS_SR(GIE);
-        }
-#else
-        //P1IE |= INPUT_PIN;
-        _BIS_SR(GIE);
-#endif
-        DEBUG_PIN5_LOW;
-        
-  }
-  else
-  {
-    // I have no idea what this is, but clear it and reenable interrupts
-    P2IFG = 0;
-    //P1IE |= INPUT_PIN;
-    _BIS_SR(GIE);
-  }
+{  
+  P2IFG = 0x00;
+  P2IE = 0;       // Interrupt disable
+  P1IFG = 0;
+  P1IE = 0;
+  TACTL = 0;
+  TACCTL0 = 0;
+  TACCTL1 = 0;
+  TAR = 0;
+  state = STATE_READY;
+  LPM4_EXIT;
 }
-#endif
 
 #if USE_2132
 #pragma vector=TIMER0_A0_VECTOR
@@ -1997,23 +1903,6 @@ __interrupt void TimerA0_ISR(void)   // (5-6 cycles) to enter interrupt
   LPM4_EXIT;
 }
 
-#if 0
-
-#pragma vector=TIMERB0_VECTOR
-__interrupt void TimerB0_ISR(void)   // (5-6 cycles) to enter interrupt
-{
-  //P4OUT |= BIT7;
-  TBCTL = 0;    // have to manually clear interrupt flag
-  TBCCTL0 = 0;  // have to manually clear interrupt flag
-  TBCCTL1 = 0;  // have to manually clear interrupt flag
-  LPM4_EXIT;
-  //P4OUT &= ~BIT7;
-}
-
-#endif
-
-
-
 //*************************************************************************
 //************************ PORT 1 INTERRUPT *******************************
 
@@ -2025,19 +1914,6 @@ __interrupt void TimerB0_ISR(void)   // (5-6 cycles) to enter interrupt
 __interrupt void Port1_ISR(void)   // (5-6 cycles) to enter interrupt
 {
   
-#if SIMULATE_SV_INTERRUPT
-  if ( (P1IFG & FAKE_VOLTAGE_SV_PIN) == FAKE_VOLTAGE_SV_PIN ) {
-    P1IFG &= ~FAKE_VOLTAGE_SV_PIN;
-    P1IE &= ~FAKE_VOLTAGE_SV_PIN;
-    TACTL = 0;
-    TACCTL0 = 0;
-    TACCTL1 = 0;
-    TAR = 0;
-    state = STATE_RECEIVE_QUERY; // FIXME FIXME
-    LPM4_EXIT;
-    return;
-  }
-#endif  
 
 #if USE_2132
   asm("MOV TA0R, R7");  // move TAR to R7(count) register (3 CYCLES)
@@ -2196,8 +2072,8 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
   // assign data address to dest
   dest = data;
   // Setup timer
-  P1SEL |= OUTPUT_PIN; //  select TIMER_A0
-  P1DIR |= OUTPUT_PIN;
+  P1SEL |= TX_PIN; //  select TIMER_A0
+//  P1DIR |= TX_PIN; // already set.
   TACTL |= TACLR;   //reset timer A
   TACTL = TASSEL1 + MC0;     // up mode
 
@@ -2620,6 +2496,8 @@ inline void crc16_ccitt_readReply(unsigned int numDataBytes)
   readReply[numDataBytes + 2] |= (unsigned char) (__swap_bytes(readReplyCRC) & 0x7F);
 }
 
+#if 0
+// not used now, but will need for later
 unsigned char crc5(volatile unsigned char *buf, unsigned short numOfBits)
 {
   register unsigned char shift;
@@ -2638,8 +2516,8 @@ unsigned char crc5(volatile unsigned char *buf, unsigned short numOfBits)
   }
   shift = shift >>3;
   return (unsigned char)(shift);
-
 }
+#endif
 
 #if ENABLE_SLOTS
 
@@ -2756,4 +2634,3 @@ int bitCompare(unsigned char *startingByte1, unsigned short startingBit1,
         return 1;
 }
 #endif
-
