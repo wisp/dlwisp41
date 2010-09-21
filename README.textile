@@ -1,16 +1,8 @@
-As mentioned at http://wisp.wikispaces.com/Getting+firmware+and+software, this
-is the _community fork_ of the DL WISP 4.1 firmware.  New development happens in
-this fork.  The original version of this firmware is archived in a repository at
-Intel Research Seattle:
+As mentioned at http://wisp.wikispaces.com/Getting+firmware+and+software, this is the _community fork_ of the DL WISP 4.1 firmware.  New development happens in this fork.  The original version of this firmware is archived in a "Subversion repository":https://svn.seattle.intel-research.net/repos/wisp_challenge at Intel Research Seattle.
 
-  Subversion repository URL:
-  https://svn.seattle.intel-research.net/repos/wisp_challenge
+For more information about WISP, refer to the "WISP wiki":http://wisp.wikispaces.com/.
 
-For more information about WISP, refer to the
-"WISP wiki":http://wisp.wikispaces.com/.
-
-The initial import of the Subversion repository into this Github project
-occurred on September 21, 2010.
+The initial import of the Subversion repository into this Github project occurred on September 21, 2010.
 
 <pre>
 /*
