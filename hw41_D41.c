@@ -236,11 +236,11 @@ unsigned char RN16[23];
 
 // compiler uses working register 4 as a global variable
 // Pointer to &cmd[bits]
-extern volatile __no_init __regvar unsigned char* dest @ 4;
+volatile __no_init __regvar unsigned char* dest @ 4;
 
 // compiler uses working register 5 as a global variable
 // count of bits received from reader
-extern volatile __no_init __regvar unsigned short bits @ 5;
+volatile __no_init __regvar unsigned short bits @ 5;
 unsigned short TRcal=0;
 
 #define STATE_READY               0
@@ -328,15 +328,15 @@ inline void loadRN16(), mixupRN16();
 #endif
 void crc16_ccitt_readReply(unsigned int);
 int i;
-inline void handle_query(volatile short nextState);
-inline void handle_queryrep(volatile short nextState);
-inline void handle_queryadjust(volatile short nextState);
-inline void handle_select(volatile short nextState);
-inline void handle_ack(volatile short nextState);
-inline void handle_request_rn(volatile short nextState);
-inline void handle_read(volatile short nextState);
-inline void handle_nak(volatile short nextState);
-inline void do_nothing();
+static inline void handle_query(volatile short nextState);
+static inline void handle_queryrep(volatile short nextState);
+static inline void handle_queryadjust(volatile short nextState);
+static inline void handle_select(volatile short nextState);
+static inline void handle_ack(volatile short nextState);
+static inline void handle_request_rn(volatile short nextState);
+static inline void handle_read(volatile short nextState);
+static inline void handle_nak(volatile short nextState);
+static inline void do_nothing();
 
 #if READ_SENSOR
   #if (ACTIVE_SENSOR == SENSOR_ACCEL_QUICK)
