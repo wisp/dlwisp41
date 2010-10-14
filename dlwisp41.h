@@ -1,3 +1,5 @@
+#ifndef DLWISP41_H
+#define DLWISP41_H
 
 /*
 Copyright (c) 2009, Intel Corporation
@@ -80,3 +82,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   P1DIR = TEMP_POWER | TX_PIN | RX_EN_PIN | DEBUG_1_4 | LED_POWER | CAP_SENSE; \
   P2DIR = DEBUG_2_3 | CRYSTAL_OUT; \
   P3DIR = CLK_A | VSENSE_POWER | TX_A | RX_A;
+
+#if DEBUG_PINS_ENABLED
+#define DEBUG_PIN5_HIGH               P3OUT |= BIT5;
+#define DEBUG_PIN5_LOW                P3OUT &= ~BIT5;
+#else
+#define DEBUG_PIN5_HIGH
+#define DEBUG_PIN5_LOW
+#endif
+
+#endif // DLWISP41_H

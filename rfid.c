@@ -1,6 +1,37 @@
-#include "rfid_commands.h"
+#include "dlwisp41.h"
+#include "rfid.h"
 
-inline void handle_query(volatile short nextState)
+unsigned short Q = 0;
+unsigned short slot_counter = 0;
+unsigned short shift = 0;
+unsigned int read_counter = 0;
+unsigned int sensor_counter = 0;
+unsigned char timeToSample = 0;
+unsigned short inInventoryRound = 0;
+
+volatile unsigned char queryReply[]= { 0x00, 0x03, 0x00, 0x00};
+
+// ackReply:  First two bytes are the preamble.  Last two bytes are the crc.
+volatile unsigned char ackReply[]  = { 0x30, 0x00, EPC, 0x00, 0x00};
+
+// first 8 bits are the EPCGlobal identifier, followed by a 12-bit tag designer
+// identifer (made up), followed by a 12-bit model number
+volatile unsigned char tid[] = { 0xE2, TID_DESIGNER_ID_AND_MODEL_NUMBER };
+
+// just a one byte placeholder for now
+volatile unsigned char usermem[] = { 0x00 };
+
+volatile unsigned char readReply[] = {
+    // header - 1 bit - 0 if successful, 1 if error code follows
+    // memory words - hardcoded to 16 bits of 0xffff for now
+    // rn - 16 bits - hardcoded to 0xf00f for now
+    // crc-16 - 16 bits - precomputed as 0x06 0x72
+    // filler - 15 bits of nothing (don't send)
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x08, 0x09, 0x10, 0x11,
+    0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19};
+
+
+void handle_query(volatile short nextState)
 {
   TAR = 0;
 #if (!ENABLE_SLOTS)  && (!ENABLE_SESSIONS)
@@ -214,7 +245,7 @@ inline void handle_query(volatile short nextState)
 
 }
 
-inline void handle_queryrep(volatile short nextState)
+void handle_queryrep(volatile short nextState)
 {
 
   TAR = 0;
@@ -274,7 +305,7 @@ inline void handle_queryrep(volatile short nextState)
   state = nextState;
 }
 
-inline void handle_queryadjust(volatile short nextState)
+void handle_queryadjust(volatile short nextState)
 {
 
   TAR = 0;
@@ -390,7 +421,7 @@ inline void handle_queryadjust(volatile short nextState)
 // don't expect it to be able to look for (say) entire EPCs correctly. Also,
 // when testing this code out in RFIDDemo, put your mask data in hex in the
 // leftmost part of the pattern field.
-inline void handle_select(volatile short nextState)
+void handle_select(volatile short nextState)
 {
   do_nothing();
 
@@ -529,7 +560,7 @@ inline void handle_select(volatile short nextState)
   DEBUG_PIN5_LOW;
 }
 
-inline void handle_ack(volatile short nextState)
+void handle_ack(volatile short nextState)
 {
   TACCTL1 &= ~CCIE;
   TAR = 0;
@@ -555,7 +586,7 @@ inline void handle_ack(volatile short nextState)
   state = nextState;
 }
 
-inline void handle_request_rn(volatile short nextState)
+void handle_request_rn(volatile short nextState)
 {
   TACCTL1 &= ~CCIE;
   TAR = 0;
@@ -583,7 +614,7 @@ inline void handle_request_rn(volatile short nextState)
   state = nextState;
 }
 
-inline void handle_read(volatile short nextState)
+void handle_read(volatile short nextState)
 {
 
 #if SENSOR_DATA_IN_READ_COMMAND
@@ -633,14 +664,14 @@ inline void handle_read(volatile short nextState)
 #endif
 }
 
-inline void handle_nak(volatile short nextState)
+void handle_nak(volatile short nextState)
 {
   TACCTL1 &= ~CCIE;
   TAR = 0;
   state = nextState;
 }
 
-inline void do_nothing()
+void do_nothing()
 {
   TACCTL1 &= ~CCIE;
   TAR = 0;

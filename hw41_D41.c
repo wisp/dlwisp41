@@ -72,83 +72,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //            is reset to 'A' with every reset at the top of the while loop.
 //******************************************************************************
 
-////////////////////////////////////////////////////////////////////////////////
-// Step 1: pick an application
-// simple hardcoded query-ack
-#define SIMPLE_QUERY_ACK              1
-// return sampled sensor data as epc. best for range.
-#define SENSOR_DATA_IN_ID             0
-// support read commands. returns one word of counter data
-#define SIMPLE_READ_COMMAND           0
-// return sampled sensor data in a read command. returns three words of accel
-// data
-#define SENSOR_DATA_IN_READ_COMMAND   0
-////////////////////////////////////////////////////////////////////////////////
+/*******************************************************************************
+ *****************  Edit mywisp.h to configure this WISP  **********************
+ ******************************************************************************/
+#include "mywisp.h"
 
-
-////////////////////////////////////////////////////////////////////////////////
-// Step 1A: pick a sensor type
-// If you're not using the SENSOR_DATA_IN_ID or SENSOR_DATA_IN_READ_COMMAND
-// apps, then this is a don't care.
-// Choices:
-// use "0C" - static data - for test purposes only
-#define SENSOR_NULL                   0
-// use "0D" accel sensor sampled with 10-bit ADC, full RC settling time
-#define SENSOR_ACCEL                  1
-// use "0B" accel sensor sampled with 10-bit ADC, partial RC settling ("quick")
-// for more info, see wiki: Code Examples
-#define SENSOR_ACCEL_QUICK            2
-// use "0F" built-in temperature sensor sampled with a 10-bit ADC
-#define SENSOR_INTERNAL_TEMP          3
-// use "0E" external temperature sensor sampled with a 10-bit ADC
-#define SENSOR_EXTERNAL_TEMP          4
-// use "0A" comm statistics
-#define SENSOR_COMM_STATS             5
-
-// Choose Active Sensor:
-#define ACTIVE_SENSOR                 SENSOR_ACCEL_QUICK
-////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////
-// Step 2: pick a reader and wisp hardware
-// make sure this syncs with project target
-#define BLUE_WISP                     0x41
-#define WISP_VERSION                  BLUE_WISP
-#define IMPINJ_READER                 1
-////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////
-// Step 3: pick protocol features
-// The spec actually requires all these features, but as a practical matter
-// supporting things like slotting and sessions requires extra power and thus
-// limits range. Another factor is if you are running out of room on flash --
-// e.g., you're using the flash-limited free IAR kickstart compiler -- you
-// probably want to leave these features out unless you really need them.
-//
-// You only need ENABLE_SLOTS when you're working with more than one WISP. The
-// code will run fine without ENABLE_SLOTS if you're using one WISP with
-// multiple non-WISP rfid tags.
-//
-// ENABLE_SESSIONS is new code that hasn't been tested in a multiple reader
-// environment. Also note a workaround I use in handle_queryrep to deal with
-// what appears to be unexpected session values in the reader I'm using.
-//
-// Known issue: ENABLE_SLOTS and ENABLE_SESSIONS won't work together;
-// it's probably just a matter of finding the right reply timing in handle_query
-#define ENABLE_SLOTS            0
-#define ENABLE_SESSIONS         0
-#define ENABLE_HANDLE_CHECKING          0 // not implemented yet ...
-////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////
-// Step 4: set EPC and TID identifiers (optional)
-#define WISP_ID 0x00, 2
-#define EPC 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, \
-    WISP_VERSION, WISP_ID
-#define TID_DESIGNER_ID_AND_MODEL_NUMBER 0xFF, 0xF0, 0x01
-////////////////////////////////////////////////////////////////////////////////
-
-#include "rfid_commands.h"
+/* Other header files */
+#include "rfid.h"
 
 #if(WISP_VERSION == BLUE_WISP)
   #include "dlwisp41.h"
@@ -189,15 +119,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define wisp_debug_5                  RX_A        // P3.5
 #define MONITOR_DEBUG_ON                 0
 
-#define DEBUG_PINS_ENABLED            0
-#if DEBUG_PINS_ENABLED
-#define DEBUG_PIN5_HIGH               P3OUT |= BIT5;
-#define DEBUG_PIN5_LOW                P3OUT &= ~BIT5;
-#else
-#define DEBUG_PIN5_HIGH
-#define DEBUG_PIN5_LOW
-#endif
-
 // ------------------------------------------------------------------------
 
 #define SEND_CLOCK  \
@@ -210,43 +131,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   DCOCTL = 0; \
   BCSCTL2 = 0; // Rext = ON
 
-#define BUFFER_SIZE 16                       // max of 16 bytes rec. from reader
-#define MAX_BITS (BUFFER_SIZE * 8)
-#define POLY5 0x48
-volatile unsigned char cmd[BUFFER_SIZE+1];          // stored cmd from reader
-/*
-volatile unsigned char reply[BUFFER_SIZE+1]= { 0x30, 0x35, 0xaa, 0xab,
-0x55,0xff,0xaa,0xab,0x55,0xff,0xaa,0xab,0x55,0xff,0x00, 0x00};
-*/
 volatile unsigned char* destorig = &cmd[0];       // pointer to beginning of cmd
 
 // #pragma data_alignment=2 is important in sendResponse() when the words are
 // copied into arrays.  Sometimes the compiler puts reply[0] on an odd address,
 // which cannot be copied as a word and thus screws everything up.
 #pragma data_alignment=2
-
-volatile unsigned char queryReply[]= { 0x00, 0x03, 0x00, 0x00};
-
-// ackReply:  First two bytes are the preamble.  Last two bytes are the crc.
-volatile unsigned char ackReply[]  = { 0x30, 0x00, EPC, 0x00, 0x00};
-
-// first 8 bits are the EPCGlobal identifier, followed by a 12-bit tag designer
-// identifer (made up), followed by a 12-bit model number
-volatile unsigned char tid[] = { 0xE2, TID_DESIGNER_ID_AND_MODEL_NUMBER };
-
-// just a one byte placeholder for now
-volatile unsigned char usermem[] = { 0x00 };
-
-volatile unsigned char readReply[] = {
-    // header - 1 bit - 0 if successful, 1 if error code follows
-    // memory words - hardcoded to 16 bits of 0xffff for now
-    // rn - 16 bits - hardcoded to 0xf00f for now
-    // crc-16 - 16 bits - precomputed as 0x06 0x72
-    // filler - 15 bits of nothing (don't send)
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x08, 0x09, 0x10, 0x11,
-    0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19};
-
-unsigned char RN16[23];
 
 // compiler uses working register 4 as a global variable
 // Pointer to &cmd[bits]
@@ -265,35 +155,6 @@ unsigned short TRcal=0;
 #define STATE_SECURED             5
 #define STATE_KILLED              6
 #define STATE_READ_SENSOR         7
-
-// the bit count will be different from the spec, because we don't adjust it for
-// processing frame-syncs/rtcal/trcals. however, the cmd buffer will contain
-// pure packet data.
-#if ENABLE_SLOTS
-#define NUM_QUERY_BITS          21
-#define NUM_READ_BITS           53  // 60 bits actually received, but need to
-                                    // break off early for computation
-#define MAX_NUM_READ_BITS       60
-#elif ENABLE_SESSIONS
-#define NUM_QUERY_BITS          21
-#define NUM_READ_BITS           53  // 60 bits actually received, but need to
-                                    // break off early for computation
-#define MAX_NUM_READ_BITS       60
-#else
-#define NUM_QUERY_BITS          24
-#define NUM_READ_BITS           55   // 60 bits actually received, but need to
-                                     // break off early for computation
-#define MAX_NUM_READ_BITS       60
-#endif
-#define MAX_NUM_QUERY_BITS      25
-#define NUM_QUERYADJ_BITS       9
-#define NUM_QUERYREP_BITS       5
-#define MAX_NUM_QUERYADJ_BITS   9
-#define NUM_ACK_BITS            20
-#define NUM_REQRN_BITS          41
-#define NUM_NAK_BITS            10
-
-#include "rfid.h"
 
 #if ENABLE_SESSIONS
 // selected and session inventory flags
@@ -318,12 +179,6 @@ void handle_session_timeout();
 inline int bitCompare(unsigned char *startingByte1, unsigned short startingBit1,
         unsigned char *startingByte2, unsigned short startingBit2, unsigned
         short len);
-#endif
-
-void sendToReader(volatile unsigned char *data, unsigned char numOfBits);
-unsigned short crc16_ccitt(volatile unsigned char *data, unsigned short n);
-#if 0
-unsigned char crc5(volatile unsigned char *buf, unsigned short numOfBits);
 #endif
 void setup_to_receive();
 void sleep();
