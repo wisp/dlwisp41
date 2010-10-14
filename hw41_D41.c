@@ -1,23 +1,28 @@
 /*
 Copyright (c) 2009, Intel Corporation
 All rights reserved.
- 
-Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following
-conditions are met:
- 
-    * Redistributions of source code must retain the above copyright notice, this list of conditions and the following
-disclaimer.
-    * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
-disclaimer in the documentation and/or other materials provided with the distribution.
-    * Neither the name of Intel Corporation nor the names of its contributors may be used to endorse or promote products
-derived from this software without specific prior written permission.
- 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright notice,
+      this list of conditions and the following disclaimer in the documentation
+      and/or other materials provided with the distribution.
+    * Neither the name of Intel Corporation nor the names of its contributors
+      may be used to endorse or promote products derived from this software
+      without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
@@ -35,34 +40,36 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //             P2.4 = Supervisor In
 //             P2.5 = Supervisor In
 //
-//	       Tested against Impinj v 3.0.2 reader, Miller-4 encodings
-//	       Alien reader code is out of date
+//         Tested against Impinj v 3.0.2 reader, Miller-4 encodings
+//         Alien reader code is out of date
 //
-//	This is a partial implementation of the RFID EPCGlobal C1G2 protocol
-//	for the WISP 4.1 hardware platform.
-//	
-//	What's missing: 
+//  This is a partial implementation of the RFID EPCGlobal C1G2 protocol
+//  for the WISP 4.1 hardware platform.
+//
+//  What's missing:
 //        - SECURED and KILLED states.
-//        - No support for WRITE, KILL, LOCK, ACCESS, BLOCKWRITE and BLOCKERASE commands.
+//        - No support for WRITE, KILL, LOCK, ACCESS, BLOCKWRITE and BLOCKERASE
+//          commands.
 //        - Commands with EBVs always assume that the field is 8 bits long.
 //        - SELECTS don't support truncation.
 //        - READs ignore membank, wordptr, and wordcount fields. (What READs do
-//          return is dependent on what application you have configured in step 1.)
-//        - I sometimes get erroneous-looking session values in QUERYREP commands.
-//          For the time being, I just parse the command as if the session value
-//          is the same as my previous_session value.
+//          return is dependent on what application you have configured in step
+//          1.)
+//        - I sometimes get erroneous-looking session values in QUERYREP
+//          commands.  For the time being, I just parse the command as if the
+//          session value is the same as my previous_session value.
 //        - QUERYs use a pretty aggressive slotting algorithm to preserve power.
 //          See the comments in that function for details.
-//        - Session timeouts work differently than what's in table 6.15 of the spec.
-//          Here's what we do:
-//            SL comes up as not asserted, and persists as long as it's in ram retention
-//            mode or better.
-//            All inventory flags come up as 'A'. S0's inventory flag persists as
-//            long as it's in ram retention mode or better. S1's inventory flag persists
-//            as long as it's in an inventory round and in ram retention mode or better;
-//            otherwise it is reset to 'A' with every reset at the top of the while
-//            loop. S2's and S3's inventory flag is reset to 'A' with every reset at
-//            the top of the while loop.
+//        - Session timeouts work differently than what's in table 6.15 of the
+//          spec.  Here's what we do:
+//            SL comes up as not asserted, and persists as long as it's in ram
+//            retention mode or better.
+//            All inventory flags come up as 'A'. S0's inventory flag persists
+//            as long as it's in ram retention mode or better. S1's inventory
+//            flag persists as long as it's in an inventory round and in ram
+//            retention mode or better; otherwise it is reset to 'A' with every
+//            reset at the top of the while loop. S2's and S3's inventory flag
+//            is reset to 'A' with every reset at the top of the while loop.
 //******************************************************************************
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -73,15 +80,16 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SENSOR_DATA_IN_ID             0
 // support read commands. returns one word of counter data
 #define SIMPLE_READ_COMMAND           0
-// return sampled sensor data in a read command. returns three words of accel data
+// return sampled sensor data in a read command. returns three words of accel
+// data
 #define SENSOR_DATA_IN_READ_COMMAND   0
 ////////////////////////////////////////////////////////////////////////////////
 
 
 ////////////////////////////////////////////////////////////////////////////////
 // Step 1A: pick a sensor type
-// If you're not using the SENSOR_DATA_IN_ID or SENSOR_DATA_IN_READ_COMMAND apps,
-// then this is a don't care.
+// If you're not using the SENSOR_DATA_IN_ID or SENSOR_DATA_IN_READ_COMMAND
+// apps, then this is a don't care.
 // Choices:
 // use "0C" - static data - for test purposes only
 #define SENSOR_NULL                   0
@@ -111,11 +119,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ////////////////////////////////////////////////////////////////////////////////
 // Step 3: pick protocol features
-// The spec actually requires all these features, but as a practical matter 
-// supporting things like slotting and sessions requires extra power and thus 
+// The spec actually requires all these features, but as a practical matter
+// supporting things like slotting and sessions requires extra power and thus
 // limits range. Another factor is if you are running out of room on flash --
-// e.g., you're using the flash-limited free IAR kickstart compiler -- you probably
-// want to leave these features out unless you really need them.
+// e.g., you're using the flash-limited free IAR kickstart compiler -- you
+// probably want to leave these features out unless you really need them.
 //
 // You only need ENABLE_SLOTS when you're working with more than one WISP. The
 // code will run fine without ENABLE_SLOTS if you're using one WISP with
@@ -127,16 +135,17 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Known issue: ENABLE_SLOTS and ENABLE_SESSIONS won't work together;
 // it's probably just a matter of finding the right reply timing in handle_query
-#define ENABLE_SLOTS 			0
-#define ENABLE_SESSIONS			0
+#define ENABLE_SLOTS            0
+#define ENABLE_SESSIONS         0
 #define ENABLE_HANDLE_CHECKING          0 // not implemented yet ...
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
 // Step 4: set EPC and TID identifiers (optional)
 #define WISP_ID 0x00, 2
-#define EPC   0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, WISP_VERSION, WISP_ID
-#define TID_DESIGNER_ID_AND_MODEL_NUMBER  0xFF, 0xF0, 0x01
+#define EPC 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, \
+    WISP_VERSION, WISP_ID
+#define TID_DESIGNER_ID_AND_MODEL_NUMBER 0xFF, 0xF0, 0x01
 ////////////////////////////////////////////////////////////////////////////////
 
 #if(WISP_VERSION == BLUE_WISP)
@@ -185,8 +194,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DEBUG_PIN5_HIGH               P3OUT |= BIT5;
 #define DEBUG_PIN5_LOW                P3OUT &= ~BIT5;
 #else
-#define DEBUG_PIN5_HIGH               
-#define DEBUG_PIN5_LOW                
+#define DEBUG_PIN5_HIGH
+#define DEBUG_PIN5_LOW
 #endif
 
 // ------------------------------------------------------------------------
@@ -201,16 +210,19 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   DCOCTL = 0; \
   BCSCTL2 = 0; // Rext = ON
 
-#define BUFFER_SIZE 16                         // max of 16 bytes rec. from reader
+#define BUFFER_SIZE 16                       // max of 16 bytes rec. from reader
 #define MAX_BITS (BUFFER_SIZE * 8)
 #define POLY5 0x48
 volatile unsigned char cmd[BUFFER_SIZE+1];          // stored cmd from reader
-//volatile unsigned char reply[BUFFER_SIZE+1]= { 0x30, 0x35, 0xaa, 0xab, 0x55,0xff,0xaa,0xab,0x55,0xff,0xaa,0xab,0x55,0xff,0x00, 0x00};
-volatile unsigned char* destorig = &cmd[0];         // pointer to beginning of cmd
+/*
+volatile unsigned char reply[BUFFER_SIZE+1]= { 0x30, 0x35, 0xaa, 0xab,
+0x55,0xff,0xaa,0xab,0x55,0xff,0xaa,0xab,0x55,0xff,0x00, 0x00};
+*/
+volatile unsigned char* destorig = &cmd[0];       // pointer to beginning of cmd
 
-// #pragma data_alignment=2 is important in sendResponse() when the words are copied into arrays.
-// Sometimes the compiler puts reply[0] on an
-// odd address, which cannot be copied as a word and thus screws everything up.
+// #pragma data_alignment=2 is important in sendResponse() when the words are
+// copied into arrays.  Sometimes the compiler puts reply[0] on an odd address,
+// which cannot be copied as a word and thus screws everything up.
 #pragma data_alignment=2
 
 volatile unsigned char queryReply[]= { 0x00, 0x03, 0x00, 0x00};
@@ -218,19 +230,21 @@ volatile unsigned char queryReply[]= { 0x00, 0x03, 0x00, 0x00};
 // ackReply:  First two bytes are the preamble.  Last two bytes are the crc.
 volatile unsigned char ackReply[]  = { 0x30, 0x00, EPC, 0x00, 0x00};
 
-// first 8 bits are the EPCGlobal identifier, followed by a 12-bit tag designer identifer (made up), followed by a 12-bit model number
+// first 8 bits are the EPCGlobal identifier, followed by a 12-bit tag designer
+// identifer (made up), followed by a 12-bit model number
 volatile unsigned char tid[] = { 0xE2, TID_DESIGNER_ID_AND_MODEL_NUMBER };
 
 // just a one byte placeholder for now
 volatile unsigned char usermem[] = { 0x00 };
 
-volatile unsigned char readReply[] = { 
-                                    // header - 1 bit - 0 if successful, 1 if error code follows
-                                    // memory words - hardcoded to 16 bits of 0xffff for now
-                                    // rn - 16 bits - hardcoded to 0xf00f for now
-                                    // crc-16 - 16 bits - precomputed as 0x06 0x72
-                                    // filler - 15 bits of nothing (don't send)
-                                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19};
+volatile unsigned char readReply[] = {
+    // header - 1 bit - 0 if successful, 1 if error code follows
+    // memory words - hardcoded to 16 bits of 0xffff for now
+    // rn - 16 bits - hardcoded to 0xf00f for now
+    // crc-16 - 16 bits - precomputed as 0x06 0x72
+    // filler - 15 bits of nothing (don't send)
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x08, 0x09, 0x10, 0x11,
+    0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19};
 
 unsigned char RN16[23];
 
@@ -253,19 +267,22 @@ unsigned short TRcal=0;
 #define STATE_READ_SENSOR         7
 
 // the bit count will be different from the spec, because we don't adjust it for
-// processing frame-syncs/rtcal/trcals. however, the cmd buffer will contain pure packet
-// data.
+// processing frame-syncs/rtcal/trcals. however, the cmd buffer will contain
+// pure packet data.
 #if ENABLE_SLOTS
 #define NUM_QUERY_BITS          21
-#define NUM_READ_BITS           53  // 60 bits actually received, but need to break off early for computation
+#define NUM_READ_BITS           53  // 60 bits actually received, but need to
+                                    // break off early for computation
 #define MAX_NUM_READ_BITS       60
 #elif ENABLE_SESSIONS
 #define NUM_QUERY_BITS          21
-#define NUM_READ_BITS           53  // 60 bits actually received, but need to break off early for computation
+#define NUM_READ_BITS           53  // 60 bits actually received, but need to
+                                    // break off early for computation
 #define MAX_NUM_READ_BITS       60
 #else
 #define NUM_QUERY_BITS          24
-#define NUM_READ_BITS           55   // 60 bits actually received, but need to break off early for computation
+#define NUM_READ_BITS           55   // 60 bits actually received, but need to
+                                     // break off early for computation
 #define MAX_NUM_READ_BITS       60
 #endif
 #define MAX_NUM_QUERY_BITS      25
@@ -296,22 +313,27 @@ unsigned char last_handle_b0, last_handle_b1;
 
 #if ENABLE_SESSIONS
 // selected and session inventory flags
-#define S0_INDEX		0x00
-#define S1_INDEX		0x01
-#define S2_INDEX		0x02
-#define S3_INDEX		0x03 
+#define S0_INDEX        0x00
+#define S1_INDEX        0x01
+#define S2_INDEX        0x02
+#define S3_INDEX        0x03
 
-#define SL_ASSERTED		1
-#define SL_NOT_ASSERTED		0
-#define SESSION_STATE_A		0
-#define SESSION_STATE_B		1
+#define SL_ASSERTED     1
+#define SL_NOT_ASSERTED     0
+#define SESSION_STATE_A     0
+#define SESSION_STATE_B     1
 
 unsigned char SL;
 unsigned char previous_session = 0x00;
-unsigned char session_table[] = { SESSION_STATE_A, SESSION_STATE_A, SESSION_STATE_A, SESSION_STATE_A };
+unsigned char session_table[] = {
+    SESSION_STATE_A, SESSION_STATE_A,
+    SESSION_STATE_A, SESSION_STATE_A
+};
 void initialize_sessions();
 void handle_session_timeout();
-inline int bitCompare(unsigned char *startingByte1, unsigned short startingBit1, unsigned char *startingByte2, unsigned short startingBit2, unsigned short len);
+inline int bitCompare(unsigned char *startingByte1, unsigned short startingBit1,
+        unsigned char *startingByte2, unsigned short startingBit2, unsigned
+        short len);
 #endif
 
 void sendToReader(volatile unsigned char *data, unsigned char numOfBits);
@@ -346,34 +368,34 @@ static inline void do_nothing();
   #elif (ACTIVE_SENSOR == SENSOR_INTERNAL_TEMP)
     #include "int_temp_sensor.h"
   #elif (ACTIVE_SENSOR == SENSOR_EXTERNAL_TEMP)
-	#error "SENSOR_EXTERNAL_TEMP not yet implemented"
+    #error "SENSOR_EXTERNAL_TEMP not yet implemented"
   #elif (ACTIVE_SENSOR == SENSOR_NULL)
     #include "null_sensor.h"
   #elif (ACTIVE_SENSOR == SENSOR_COMM_STATS)
-	#error "SENSOR_COMM_STATS not yet implemented"
+    #error "SENSOR_COMM_STATS not yet implemented"
   #endif
 #endif
 
 int main(void)
 {
-  //**********************************Timer setup**********************************
-  WDTCTL = WDTPW + WDTHOLD;            // Stop Watchdog Timer 
-  
+  //*******************************Timer setup**********************************
+  WDTCTL = WDTPW + WDTHOLD;            // Stop Watchdog Timer
+
   P1SEL = 0;
   P2SEL = 0;
-  
+
   P1IE = 0;
   P1IFG = 0;
   P2IFG = 0;
 
   DRIVE_ALL_PINS // set pin directions correctly and outputs to low.
-  
+
   // Check power on bootup, decide to receive or sleep.
   if(!is_power_good())
     sleep();
-  
+
   RECEIVE_CLOCK;
- 
+
   /*
   // already set.
 #if MONITOR_DEBUG_ON
@@ -399,13 +421,13 @@ int main(void)
   // setup int epc
   epc = ackReply[2]<<8;
   epc |= ackReply[3];
-  
+
   // calculate RN16_1 table
   for (Q = 0; Q < 16; Q++)
   {
     rn16 = epc^Q;
     lfsr();
-    
+
     if (Q > 8)
     {
       RN16[(Q<<1)-9] = __swap_bytes(rn16);
@@ -417,7 +439,7 @@ int main(void)
     }
   }
 #endif
-  
+
   TACTL = 0;
 
 //  P1IES &= ~BIT2; // initial state is POS edge to find start of CW
@@ -425,7 +447,7 @@ int main(void)
 
   asm("MOV #0000h, R9");
   // dest = destorig;
-  
+
 #if READ_SENSOR
   init_sensor();
 #endif
@@ -435,7 +457,7 @@ int main(void)
   queryReply[3] = (unsigned char)queryReplyCRC;
   queryReply[2] = (unsigned char)__swap_bytes(queryReplyCRC);
 #endif
-  
+
 #if SENSOR_DATA_IN_ID
   // this branch is for sensor data in the id
   ackReply[2] = SENSOR_DATA_TYPE_ID;
@@ -450,30 +472,30 @@ int main(void)
 #if ENABLE_SESSIONS
   initialize_sessions();
 #endif
-  
+
   //state = STATE_ARBITRATE;
   state = STATE_READY;
 
-#if MONITOR_DEBUG_ON  
+#if MONITOR_DEBUG_ON
   // for monitor - set STATE READY debug line - 00000 - 0
   P1OUT |= wisp_debug_1;
   P1OUT &= ~wisp_debug_1;
   P2OUT &= ~wisp_debug_2;
 #endif
-  
+
   setup_to_receive();
-  
+
   while (1)
-  {   
-    
+  {
+
     // TIMEOUT!  reset timer
     if (TAR > 0x256 || delimiterNotFound)   // was 0x1000
-    {  
+    {
       if(!is_power_good()) {
         sleep();
       }
 
-#if MONITOR_DEBUG_ON      
+#if MONITOR_DEBUG_ON
       // for monitor - set TAR OVERFLOW debug line - 00111 - 7
       if (!delimiterNotFound)
       {
@@ -483,7 +505,7 @@ int main(void)
         P3OUT = 0x31;
       }
 #endif
-      
+
 #if SENSOR_DATA_IN_ID
     // this branch is for sensor data in the id
       if ( timeToSample++ == 10 ) {
@@ -497,35 +519,35 @@ int main(void)
       }
 #else
 #if !(ENABLE_READS)
-    if(!is_power_good()) 
+    if(!is_power_good())
         sleep();
 #endif
     inInventoryRound = 0;
     state = STATE_READY;
-    
+
 #if MONITOR_DEBUG_ON
     // for monitor - set STATE READY debug line - 00000 - 0
     P1OUT |= wisp_debug_1;
     P1OUT &= ~wisp_debug_1;
     P2OUT &= ~wisp_debug_2;
 #endif
-    
+
 #endif
 
 #if ENABLE_SESSIONS
     handle_session_timeout();
 #endif
-    
+
 #if ENABLE_SLOTS
     if (shift < 4)
         shift += 1;
     else
         shift = 0;
 #endif
-       
+
       setup_to_receive();
     }
-    
+
     switch (state)
     {
       case STATE_READY:
@@ -543,10 +565,10 @@ int main(void)
           P2OUT |= wisp_debug_2;
           P3OUT = 0x01;
 #endif
-          
+
           //DEBUG_PIN5_HIGH;
           handle_query(STATE_REPLY);
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set STATE REPLY debug line - 00010 - 2
           P1OUT |= wisp_debug_1;
@@ -554,7 +576,7 @@ int main(void)
           P2OUT &= ~wisp_debug_2;
           P3OUT = 0x10;
 #endif
-          
+
           setup_to_receive();
         }
         //////////////////////////////////////////////////////////////////////
@@ -563,7 +585,7 @@ int main(void)
         // @ short distance has slight impact on performance
         else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set QUERY_ADJ debug line - 01101 - 13
           P1OUT |= wisp_debug_1;
@@ -580,11 +602,11 @@ int main(void)
         // got >= 22 bits, and it's not the beginning of a select. just reset.
         //////////////////////////////////////////////////////////////////////
         else if ( bits >= MAX_NUM_QUERY_BITS && ( ( cmd[0] & 0xF0 ) != 0xA0 ) )
-        { 
+        {
           do_nothing();
           state = STATE_READY;
           delimiterNotFound = 1;
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set debug line - 01110 - 14
           P1OUT |= wisp_debug_1;
@@ -592,11 +614,11 @@ int main(void)
           P2OUT &= ~wisp_debug_2;
           P3OUT = 0x30;
 #endif
-        }   
+        }
         break;
       }
-      case STATE_ARBITRATE:		
-      {     
+      case STATE_ARBITRATE:
+      {
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
         //////////////////////////////////////////////////////////////////////
@@ -609,10 +631,10 @@ int main(void)
           P2OUT |= wisp_debug_2;
           P3OUT = 0x01;
 #endif
-          
+
           //DEBUG_PIN5_HIGH;
           handle_query(STATE_REPLY);
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set STATE REPLY debug line - 00010 - 2
           P1OUT |= wisp_debug_1;
@@ -620,7 +642,7 @@ int main(void)
           P2OUT &= ~wisp_debug_2;
           P3OUT = 0x10;
 #endif
-          
+
           setup_to_receive();
         }
         //////////////////////////////////////////////////////////////////////
@@ -633,7 +655,7 @@ int main(void)
           do_nothing();
           state = STATE_READY;
           delimiterNotFound = 1;
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
           P1OUT |= wisp_debug_1;
@@ -641,7 +663,7 @@ int main(void)
           P2OUT &= ~wisp_debug_2;
           P3OUT = 0x30;
 #endif
-          
+
           //DEBUG_PIN5_LOW;
         }
         // this state handles query, queryrep, queryadjust, and select commands.
@@ -662,7 +684,7 @@ int main(void)
           //DEBUG_PIN5_LOW;
           //setup_to_receive();
           delimiterNotFound = 1;
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
           P1OUT |= wisp_debug_1;
@@ -680,7 +702,7 @@ int main(void)
           // do setup_to_receive() rather than dnf =1. not sure that this holds
           // true at distance though - need to recheck @ 2-3 ms.
           //DEBUG_PIN5_HIGH;
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set QUERY_ADJ debug line - 01101 - 13
           P1OUT |= wisp_debug_1;
@@ -688,7 +710,7 @@ int main(void)
           P2OUT |= wisp_debug_2;
           P3OUT = 0x21;
 #endif
-          
+
           handle_queryadjust(STATE_REPLY);
           //DEBUG_PIN5_LOW;
           setup_to_receive();
@@ -707,12 +729,12 @@ int main(void)
           P2OUT |= wisp_debug_2;
           P3OUT = 0x30;
 #endif
-          
+
           //DEBUG_PIN5_HIGH;
           handle_select(STATE_READY);
           //DEBUG_PIN5_LOW;
           delimiterNotFound = 1;
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
           P1OUT |= wisp_debug_1;
@@ -720,13 +742,13 @@ int main(void)
           P2OUT &= ~wisp_debug_2;
           P3OUT = 0x30;
 #endif
-          
+
         } // select command
-       
+
       break;
       }
-    
-      case STATE_REPLY:		
+
+      case STATE_REPLY:
       {
         // this state handles query, query adjust, ack, and select commands
         ///////////////////////////////////////////////////////////////////////
@@ -797,11 +819,11 @@ int main(void)
           P2OUT |= wisp_debug_2;
           P3OUT = 0x20;
 #endif
-          
+
           //DEBUG_PIN5_HIGH;
-	  do_nothing();
-	  state = STATE_ARBITRATE;
-          
+      do_nothing();
+      state = STATE_ARBITRATE;
+
 #if MONITOR_DEBUG_ON
           // for monitor - set STATE ARBITRATE debug line - 00001 - 1
           P1OUT |= wisp_debug_1;
@@ -809,7 +831,7 @@ int main(void)
           P2OUT &= ~wisp_debug_2;
           P3OUT = 0x01;
 #endif
-          
+
           //handle_queryrep(STATE_ARBITRATE);
           //DEBUG_PIN5_LOW;
           setup_to_receive();
@@ -818,7 +840,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYADJUST command
         //////////////////////////////////////////////////////////////////////
-          else if ( bits == NUM_QUERYADJ_BITS  && ( ( cmd[0] & 0xF8 ) == 0x48 ) )
+          else if (bits == NUM_QUERYADJ_BITS && ( ( cmd[0] & 0xF8 ) == 0x48 ))
         {
 #if MONITOR_DEBUG_ON
           // for monitor - set QUERY_ADJ debug line - 01101 - 13
@@ -832,7 +854,7 @@ int main(void)
           //DEBUG_PIN5_LOW;
           //setup_to_receive();
           delimiterNotFound = 1;
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
           P1OUT |= wisp_debug_1;
@@ -840,7 +862,7 @@ int main(void)
           P2OUT &= ~wisp_debug_2;
           P3OUT = 0x30;
 #endif
-          
+
         } // queryadjust command
         //////////////////////////////////////////////////////////////////////
         // process the SELECT command
@@ -854,12 +876,12 @@ int main(void)
           P2OUT |= wisp_debug_2;
           P3OUT = 0x30;
 #endif
-          
+
           //DEBUG_PIN5_HIGH;
-          handle_select(STATE_READY); 
+          handle_select(STATE_READY);
           //DEBUG_PIN5_LOW;
           delimiterNotFound = 1;
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
           P1OUT |= wisp_debug_1;
@@ -867,10 +889,11 @@ int main(void)
           P2OUT &= ~wisp_debug_2;
           P3OUT = 0x30;
 #endif
-          
+
           //setup_to_receive();
         } // select command
-        else if ( bits >= MAX_NUM_QUERY_BITS && ( ( cmd[0] & 0xF0 ) != 0xA0 ) && ( ( cmd[0] & 0xF0 ) != 0x80 ) )
+        else if ( bits >= MAX_NUM_QUERY_BITS && ( ( cmd[0] & 0xF0 ) != 0xA0 ) &&
+                ( ( cmd[0] & 0xF0 ) != 0x80 ) )
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
@@ -880,8 +903,8 @@ int main(void)
         }
         break;
       }
-      case STATE_ACKNOWLEDGED:		
-      {      
+      case STATE_ACKNOWLEDGED:
+      {
         // responds to query, ack, request_rn cmds
         // takes action on queryrep, queryadjust, and select cmds
         /////////////////////////////////////////////////////////////////////
@@ -904,7 +927,7 @@ int main(void)
 #else
           handle_request_rn(STATE_READY);
           delimiterNotFound = 1;
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
           P1OUT |= wisp_debug_1;
@@ -914,7 +937,7 @@ int main(void)
 #endif
 #endif
         }
-        
+
 #if 1
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
@@ -932,7 +955,7 @@ int main(void)
           handle_query(STATE_REPLY);
           //DEBUG_PIN5_LOW;
           delimiterNotFound = 1;
-          
+
 #if MONITOR_DEBUG_ON
           // for monitor - set DELIMITER NOT FOUND debug line - 00110 - 6
           P1OUT |= wisp_debug_1;
@@ -940,7 +963,7 @@ int main(void)
           P2OUT &= ~wisp_debug_2;
           P3OUT = 0x30;
 #endif
-          
+
           //setup_to_receive();
         }
         ///////////////////////////////////////////////////////////////////////
@@ -961,7 +984,7 @@ int main(void)
 #endif
           //DEBUG_PIN5_HIGH;
           handle_ack(STATE_ACKNOWLEDGED);
-          
+
 #if MONITOR_DEBUG_ON
               // for monitor - set STATE ACK debug line - 00011 - 3
     P1OUT |= wisp_debug_1;
@@ -969,7 +992,7 @@ int main(void)
     P2OUT &= ~wisp_debug_2;
     P3OUT = 0x11;
 #endif
-          
+
           //DEBUG_PIN5_LOW;
           setup_to_receive();
         }
@@ -978,9 +1001,10 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         else if ( bits == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) )
         {
-          // in the acknowledged state, rfid chips don't respond to queryrep commands
+          // in the acknowledged state, rfid chips don't respond to queryrep
+          // commands
           do_nothing();
-          state = STATE_READY; 
+          state = STATE_READY;
           delimiterNotFound = 1;
         } // queryrep command
 
@@ -991,7 +1015,7 @@ int main(void)
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
-          state = STATE_READY; 
+          state = STATE_READY;
           delimiterNotFound = 1;
           //DEBUG_PIN5_LOW;
         } // queryadjust command
@@ -1001,10 +1025,10 @@ int main(void)
         else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
           //DEBUG_PIN5_HIGH;
-          handle_select(STATE_READY); 
+          handle_select(STATE_READY);
           delimiterNotFound = 1;
           //DEBUG_PIN5_LOW;
-        } // select command   
+        } // select command
         //////////////////////////////////////////////////////////////////////
         // process the NAK command
         //////////////////////////////////////////////////////////////////////
@@ -1013,10 +1037,10 @@ int main(void)
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
-          state = STATE_ARBITRATE; 
+          state = STATE_ARBITRATE;
           delimiterNotFound = 1;
           //DEBUG_PIN5_LOW;
-        } 
+        }
         //////////////////////////////////////////////////////////////////////
         // process the READ command
         //////////////////////////////////////////////////////////////////////
@@ -1049,11 +1073,11 @@ int main(void)
           state = STATE_ARBITRATE;
           delimiterNotFound = 1 ;
           //DEBUG_PIN5_LOW;
-        }          
-        
+        }
+
 #if 0
         // kills performance ...
-        else if ( bits >= 44 ) 
+        else if ( bits >= 44 )
         {
           do_nothing();
           state = STATE_ARBITRATE;
@@ -1062,9 +1086,10 @@ int main(void)
 #endif
         break;
       }
-      case STATE_OPEN:		
+      case STATE_OPEN:
       {
-        // responds to query, ack, req_rn, read, write, kill, access, blockwrite, and blockerase cmds
+        // responds to query, ack, req_rn, read, write, kill, access,
+        // blockwrite, and blockerase cmds
         // processes queryrep, queryadjust, select cmds
         //////////////////////////////////////////////////////////////////////
         // process the READ command
@@ -1099,7 +1124,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYREP command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) ) 
+        else if ( bits == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) )
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
@@ -1111,7 +1136,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYADJUST command
         //////////////////////////////////////////////////////////////////////
-        //else if ( bits == NUM_QUERYADJ_BITS  && ( ( cmd[0] & 0xF0 ) == 0x90 ) )
+        //else if ( bits == NUM_QUERYADJ_BITS && ( ( cmd[0] & 0xF0 ) == 0x90 ) )
           else if ( bits == 9  && ( ( cmd[0] & 0xF8 ) == 0x48 ) )
         {
           //DEBUG_PIN5_HIGH;
@@ -1136,7 +1161,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
-          handle_select(STATE_READY); 
+          handle_select(STATE_READY);
           delimiterNotFound = 1;
         } // select command
         //////////////////////////////////////////////////////////////////////
@@ -1145,20 +1170,20 @@ int main(void)
         //else if ( bits >= NUM_NAK_BITS && ( cmd[0] == 0xC0 ) )
         else if ( bits >= 10 && ( cmd[0] == 0xC0 ) )
         {
-          handle_nak(STATE_ARBITRATE); 
+          handle_nak(STATE_ARBITRATE);
           delimiterNotFound = 1;
         }
 
         break;
       }
-    
+
     case STATE_READ_SENSOR:
-      {      
+      {
 #if SENSOR_DATA_IN_READ_COMMAND
         read_sensor(&readReply[0]);
         // crc is computed in the read state
         RECEIVE_CLOCK;
-        state = STATE_READY;  
+        state = STATE_READY;
         delimiterNotFound = 1; // reset
 #elif SENSOR_DATA_IN_ID
         read_sensor(&ackReply[3]);
@@ -1169,11 +1194,11 @@ int main(void)
         state = STATE_READY;
         delimiterNotFound = 1; // reset
 #endif
-        
+
         break;
-      } // end case  
+      } // end case
     } // end switch
-    
+
   } // while loop
 }
 
@@ -1219,7 +1244,7 @@ inline void handle_query(volatile short nextState)
   {
     subcarrierNum = 8;
   }
-          
+
   // set up for TRext
   if (cmd[0] & BIT0)
   {
@@ -1228,65 +1253,75 @@ inline void handle_query(volatile short nextState)
   {
     TRext = 0;
   }
-  
+
   //DEBUG_PIN5_HIGH;
-  
+
 #if ENABLE_SESSIONS
-  
+
 #if 1
 // command-specific bit masks
-#define QUERY_SEL_MASK		0xC0
-#define QUERY_SESSION_MASK	0x30
-#define QUERY_TARGET_MASK	0x08
+#define QUERY_SEL_MASK      0xC0
+#define QUERY_SESSION_MASK  0x30
+#define QUERY_TARGET_MASK   0x08
 
 // command-specific bit flags
-#define QUERY_SEL_SL 		0xC0
-#define QUERY_SEL_NOTSL 	0x80
+#define QUERY_SEL_SL        0xC0
+#define QUERY_SEL_NOTSL     0x80
 
   unsigned short sel = cmd[1] & QUERY_SEL_MASK;
   unsigned short session = (cmd[1] & QUERY_SESSION_MASK) >> 4;
   unsigned short target = cmd[1] & QUERY_TARGET_MASK;
   unsigned short match = 0;
-  
+
   //DEBUG_PIN5_HIGH;
 
-#define TARGETISEQUAL(t,s)      ((t == 0x00 && s == SESSION_STATE_A) || (t == 0x08  && s == SESSION_STATE_B)) 
+#define TARGETISEQUAL(t,s) \
+  ((t == 0x00 && s == SESSION_STATE_A) || (t == 0x08 && s == SESSION_STATE_B))
 
-  // if we are already in an inventory round and the session matches the previous session, invert the session inventory flag
-  if ( state == STATE_ACKNOWLEDGED || state == STATE_OPEN || state == STATE_SECURED )
+  // if we are already in an inventory round and the session matches the
+  // previous session, invert the session inventory flag
+  if ( state == STATE_ACKNOWLEDGED || state == STATE_OPEN ||
+          state == STATE_SECURED )
   {
-	if ( session == previous_session )
+    if ( session == previous_session )
         {
-		// invert session's inventory flag
-		if ( session_table[session] == SESSION_STATE_A ) session_table[session] = SESSION_STATE_B; else session_table[session] = SESSION_STATE_A;
-	}
+        // invert session's inventory flag
+        if ( session_table[session] == SESSION_STATE_A )
+            session_table[session] = SESSION_STATE_B;
+        else
+            session_table[session] = SESSION_STATE_A;
+    }
   }
 
-  // now figure out if the SL and session flags match. Let's look at the SL flag first.
-  if ( sel < QUERY_SEL_NOTSL || sel == QUERY_SEL_SL && SL == SL_ASSERTED || sel == QUERY_SEL_NOTSL && SL == SL_NOT_ASSERTED )
+  // now figure out if the SL and session flags match. Let's look at the SL flag
+  // first.
+  if ( sel < QUERY_SEL_NOTSL || sel == QUERY_SEL_SL && SL == SL_ASSERTED ||
+          sel == QUERY_SEL_NOTSL && SL == SL_NOT_ASSERTED )
   {
-	// SL flag matches -- now how about the session flag?
-	if ( TARGETISEQUAL(target,session_table[session]) )
+    // SL flag matches -- now how about the session flag?
+    if ( TARGETISEQUAL(target,session_table[session]) )
         {
-		// session match too
-		match = 1;
-	}
+        // session match too
+        match = 1;
+    }
   }
 
   if ( ! match )
   {
-	// no matching SL/session flags. don't respond and transistion to READY state.
-	TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
-	TAR = 0;
-	state = STATE_READY;
+    // no matching SL/session flags. don't respond and transistion to READY
+    // state.
+    TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
+    TAR = 0;
+    state = STATE_READY;
         //DEBUG_PIN5_LOW;
-	return;
+    return;
   }
 
-  // OK, got matching SL and session inventory flags, so we're in this inventory round. save the session
-  // to the previous_session variable in case this is a new session.
+  // OK, got matching SL and session inventory flags, so we're in this inventory
+  // round. save the session to the previous_session variable in case this is a
+  // new session.
   previous_session = session;
-  
+
 #else
   //DEBUG_PIN5_HIGH;
   while ( TAR < 140 );
@@ -1297,7 +1332,7 @@ inline void handle_query(volatile short nextState)
 
   // we don't care about SL or session inventory flags at all. just proceed
   // as if we have matched on them.
- 
+
 #endif
 
 #if ENABLE_SLOTS
@@ -1308,46 +1343,46 @@ inline void handle_query(volatile short nextState)
   Q = (cmd[1] & 0x07)<<1;
   if ((cmd[2] & 0x80) == 0x80)
     Q += 0x01;
-          
+
   // pick Q randomly
   slot_counter = Q >> shift;
-  
+
   // HACK ALERT: the Impinj reader seems to output at least two Queries before
   // it sends along an Ack. If I followed the spec, I might well reply to the
-  // first Query but not the second, owing to a nonzero slot counter. In this case
-  // the reader would just send along QueryReps until the slot counter got
-  // to zero, and I'd emit another response. Problem is, we're a power-constrained
-  // device and we don't necessarily have the ability to respond to a list of
-  // QueryReps. Therefore, I will check to see if I'm in an inventory round --
-  // that is, I've already seen a query -- and if I am, pretend my slot counter is
-  // zero and respond right away.
-  
+  // first Query but not the second, owing to a nonzero slot counter. In this
+  // case the reader would just send along QueryReps until the slot counter got
+  // to zero, and I'd emit another response. Problem is, we're a
+  // power-constrained device and we don't necessarily have the ability to
+  // respond to a list of QueryReps. Therefore, I will check to see if I'm in an
+  // inventory round -- that is, I've already seen a query -- and if I am,
+  // pretend my slot counter is zero and respond right away.
+
   // slot counter built and it's 0. we can send a reply!
   if ( inInventoryRound == 1 || slot_counter == 0)
   {
 
     //DEBUG_PIN5_HIGH;
     // compute a RN16
-    loadRN16();   
-    
+    loadRN16();
+
     // compute the CRC
     queryReplyCRC = crc16_ccitt(&queryReply[0],2);
     queryReply[3] = (unsigned char)queryReplyCRC;
     queryReply[2] = (unsigned char)__swap_bytes(queryReplyCRC);
-    
+
 #if ENABLE_HANDLE_CHECKING
     //last_handle_b0 = queryReply[0];
     //last_handle_b1 = queryReply[1];
 #endif
-    
+
     TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
     while ( TAR < 140 );
     TAR = 0;
-    
+
     // send out the packet, and transition to STATE_REPLY
-    sendToReader(&queryReply[0], 17); 
+    sendToReader(&queryReply[0], 17);
     state = nextState;
-    
+
     // mix up the RN16 table a bit for next time
     mixupRN16();
   }
@@ -1371,33 +1406,33 @@ inline void handle_query(volatile short nextState)
   //last_handle_b0 = queryReply[0];
   //last_handle_b1 = queryReply[1];
 #endif
-  
+
   // we don't care about slots, so just send the packet and go to STATE_REPLY.
-  sendToReader(&queryReply[0], 17); 
+  sendToReader(&queryReply[0], 17);
   state = nextState;
 
 #endif
   //DEBUG_PIN5_LOW;
-  
+
 }
 
-// Word to the wise: I've been testing this code against the Impinj RFIDemo, using
-// the InventoryFilter page. It appears to me that it only sends the first three bytes
-// pattern fields (aka the mask field in the spec) correctly. So don't expect it
-// to be able to look for (say) entire EPCs correctly. Also, when testing this code
-// out in RFIDDemo, put your mask data in hex in the leftmost part of the pattern
-// field.
+// Word to the wise: I've been testing this code against the Impinj RFIDemo,
+// using the InventoryFilter page. It appears to me that it only sends the first
+// three bytes pattern fields (aka the mask field in the spec) correctly. So
+// don't expect it to be able to look for (say) entire EPCs correctly. Also,
+// when testing this code out in RFIDDemo, put your mask data in hex in the
+// leftmost part of the pattern field.
 inline void handle_select(volatile short nextState)
 {
   do_nothing();
-  
+
 //DEBUG_PIN5_HIGH;
 
 #if ENABLE_SESSIONS
 // command-specific bit masks
-#define SELECT_TARGET_MASK		0x0E
-#define SELECT_ACTIONB0_MASK		0x01
-#define SELECT_ACTIONB1_MASK		0xC0
+#define SELECT_TARGET_MASK      0x0E
+#define SELECT_ACTIONB0_MASK        0x01
+#define SELECT_ACTIONB1_MASK        0xC0
 #define SELECT_MEMBANK_MASK             0x30
 #define SELECT_POINTERB0_MASK           0x0F
 #define SELECT_POINTERB1_MASK           0xF0
@@ -1407,7 +1442,7 @@ inline void handle_select(volatile short nextState)
 //#define SELECT_TRUNCATE_MASK
 
 // command-specific bit flags
-#define SELECT_TARGET_SL		0x04
+#define SELECT_TARGET_SL        0x04
 
   unsigned short target = (cmd[0] & SELECT_TARGET_MASK) >> 1;
   unsigned short action = (cmd[0] & SELECT_ACTIONB0_MASK) << 2;
@@ -1420,14 +1455,15 @@ inline void handle_select(volatile short nextState)
   unsigned short length = (cmd[2] & SELECT_LENGTHB0_MASK) << 4;
   unsigned short length2 = (cmd[3] & SELECT_LENGTHB1_MASK) >> 4;
   length |= length2;
-  
+
   // can only handle length fields > 0 and membanks == 0 are invalid
   if ( length <= 0 || membank == 0x00 )
     return;
-  
+
   unsigned char *mask = (unsigned char *)&cmd[3];
-  unsigned short maskbit = 3; // start match attempt at leftmost bit of mask field
-  
+  unsigned short maskbit = 3; // start match attempt at leftmost bit of mask
+                              // field
+
   unsigned char *sourcebyte = (unsigned char *)0;
   // OK, this is a little confusing. The pointer parameter is an offset
   // into a buffer, with a value of 0 meaning "the leftmost bit" and
@@ -1436,8 +1472,9 @@ inline void handle_select(volatile short nextState)
   // and 0 is the rightmost bit of that byte. So I'll need to do a little
   // mapping here.
   unsigned short sourcebyteoffset = ( pointer/8 );
-  unsigned short sourcebit = (7 - (pointer % 8)); // pointer->bitCompare translation
-  
+  unsigned short sourcebit = (7 - (pointer % 8)); // pointer->bitCompare
+                                                  // translation
+
   if ( membank == 0x01 )
   {
     // match on epc
@@ -1446,7 +1483,7 @@ inline void handle_select(volatile short nextState)
   }
   else if ( membank == 0x02 )
   {
-    // matching on tid. 
+    // matching on tid.
     if ( sourcebyteoffset >= 3 ) return;
     sourcebyte = (unsigned char *)&tid[0] + sourcebyteoffset;
   }
@@ -1458,81 +1495,89 @@ inline void handle_select(volatile short nextState)
     sourcebit = 7;
     if ( length > 8 ) length = 8;
   }
-  
+
   unsigned short matching = 0;
-  
+
   if ( bitCompare(sourcebyte,sourcebit,mask,maskbit,length) == 1 )
   {
     matching = 1;
   }
 
 #define ASSERT(t) { \
-	if (t == SELECT_TARGET_SL) SL = SL_ASSERTED; \
-	else session_table[t] = SESSION_STATE_A; \
-} 
+    if (t == SELECT_TARGET_SL) SL = SL_ASSERTED; \
+    else session_table[t] = SESSION_STATE_A; \
+}
 
 #define DEASSERT(t) { \
-	if (t == SELECT_TARGET_SL) SL = SL_NOT_ASSERTED; \
-	else session_table[t] = SESSION_STATE_B; \
+    if (t == SELECT_TARGET_SL) SL = SL_NOT_ASSERTED; \
+    else session_table[t] = SESSION_STATE_B; \
 }
 
 #define NEGATE(t) { \
-	if (t == SELECT_TARGET_SL) if ( SL == SL_ASSERTED ) SL = SL_NOT_ASSERTED; else SL = SL_ASSERTED; \
-	else if ( session_table[t] == SESSION_STATE_A ) session_table[t] = SESSION_STATE_B; else session_table[t] = SESSION_STATE_A; \
+    if (t == SELECT_TARGET_SL) \
+        if ( SL == SL_ASSERTED ) \
+            SL = SL_NOT_ASSERTED; \
+        else \
+            SL = SL_ASSERTED; \
+    else \
+        if ( session_table[t] == SESSION_STATE_A ) \
+            session_table[t] = SESSION_STATE_B; \
+        else \
+            session_table[t] = SESSION_STATE_A; \
 }
 
   switch ( action ) {
-	case 0x0:
-		if ( matching ) ASSERT(target) else DEASSERT(target);
-		break;
-	case 0x1:
-		if ( matching ) ASSERT(target);
-		break;
-	case 0x2:
-		if ( ! matching ) DEASSERT(target);
-		break;
-	case 0x3:
-		if ( matching ) NEGATE(target);
-		break;
-	case 0x4:
-		if ( matching ) DEASSERT(target) else ASSERT(target);
-		break;
-	case 0x5:
-		if ( matching ) DEASSERT(target);
-		break;
-	case 0x6:
-		if (!  matching ) ASSERT(target);
-		break;
-	case 0x7:
-		if (!  matching ) NEGATE(target);
-		break;
-	default:
-		break;
+    case 0x0:
+        if ( matching ) ASSERT(target) else DEASSERT(target);
+        break;
+    case 0x1:
+        if ( matching ) ASSERT(target);
+        break;
+    case 0x2:
+        if ( ! matching ) DEASSERT(target);
+        break;
+    case 0x3:
+        if ( matching ) NEGATE(target);
+        break;
+    case 0x4:
+        if ( matching ) DEASSERT(target) else ASSERT(target);
+        break;
+    case 0x5:
+        if ( matching ) DEASSERT(target);
+        break;
+    case 0x6:
+        if (!  matching ) ASSERT(target);
+        break;
+    case 0x7:
+        if (!  matching ) NEGATE(target);
+        break;
+    default:
+        break;
   }
 
 #endif
-  
+
   state = nextState;
   DEBUG_PIN5_LOW;
 }
 
 inline void handle_queryrep(volatile short nextState)
 {
-   
+
   TAR = 0;
 #if (!ENABLE_SESSIONS)
   while ( TAR < 150 );
 #endif
   //P1OUT &= ~RX_EN_PIN;   // turn off comparator
-  TACCTL1 &= ~CCIE; 
+  TACCTL1 &= ~CCIE;
   TAR = 0;
-  
+
 #if ENABLE_SESSIONS
 
 // command-specific bit masks
-#define QUERYREP_UPDNB0_MASK	0x01	
-#define QUERYREP_UPDNB1_MASK	0x80
-  
+#define QUERYREP_UPDNB0_MASK    0x01
+#define QUERYREP_UPDNB1_MASK    0x80
+
   // fyi, unless i'm missing something, the impinj reader doesn't always send
   // correct session values. for now i will comment this section out, until
   // i can test against a different reader firmware rev
@@ -1543,20 +1588,24 @@ inline void handle_queryrep(volatile short nextState)
 
   if ( session != previous_session )
   {
-	// drop the packet
-	return;
+    // drop the packet
+    return;
   }
 #else
   // hack hack hack
   unsigned char session = previous_session;
 #endif
 
-  if ( state == STATE_ACKNOWLEDGED || state == STATE_OPEN || state == STATE_SECURED ) 
+  if ( state == STATE_ACKNOWLEDGED || state == STATE_OPEN ||
+          state == STATE_SECURED )
   {
-	// invert session's inventory flag
-	if ( session_table[session] == SESSION_STATE_A ) session_table[session] = SESSION_STATE_B; else session_table[session] = SESSION_STATE_A;
-	state = STATE_READY;
-	return;
+    // invert session's inventory flag
+    if ( session_table[session] == SESSION_STATE_A )
+        session_table[session] = SESSION_STATE_B;
+    else
+        session_table[session] = SESSION_STATE_A;
+    state = STATE_READY;
+    return;
   }
 #endif
 
@@ -1574,50 +1623,54 @@ inline void handle_queryrep(volatile short nextState)
 
 inline void handle_queryadjust(volatile short nextState)
 {
-  
+
   TAR = 0;
 #if !(ENABLE_SLOTS) && !(ENABLE_SESSIONS)
   while ( TAR < 300 );
   //P1OUT &= ~RX_EN_PIN;   // turn off comparator
-  TACCTL1 &= ~CCIE; 
+  TACCTL1 &= ~CCIE;
   TAR = 0;
 #endif
 
 #if ENABLE_SESSIONS
 
 // command-specific bit masks
-#define QUERYADJ_SESSION_MASK	0x0C
+#define QUERYADJ_SESSION_MASK   0x0C
 
   unsigned short session = (cmd[0] & QUERYADJ_SESSION_MASK) >> 1;
 
   if ( session != previous_session )
   {
-	// drop the packet, but stay in the same state
-	TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
-	TAR = 0;
-	return;
+    // drop the packet, but stay in the same state
+    TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
+    TAR = 0;
+    return;
   }
 
   // if we got this packet in ACKNOWLEDGED, OPEN, or SECURED states, invert the
   // session flag and transition to STATE_READY to take myself out of this
   // inventory round.
-  if ( state == STATE_ACKNOWLEDGED || state == STATE_OPEN || state == STATE_SECURED ) 
+  if ( state == STATE_ACKNOWLEDGED || state == STATE_OPEN ||
+          state == STATE_SECURED )
   {
-	// invert session's inventory flag
-	if ( session_table[session] == SESSION_STATE_A ) session_table[session] = SESSION_STATE_B; else session_table[session] = SESSION_STATE_A;
-	state = STATE_READY;
-	TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
-	TAR = 0;
-	return;
+    // invert session's inventory flag
+    if ( session_table[session] == SESSION_STATE_A )
+        session_table[session] = SESSION_STATE_B;
+    else
+        session_table[session] = SESSION_STATE_A;
+    state = STATE_READY;
+    TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
+    TAR = 0;
+    return;
   }
 
 #endif
-  
+
 #if ENABLE_SLOTS
 
-#define QUERYADJ_UPDNB0_MASK	0x01	
-#define QUERYADJ_UPDNB1_MASK	0xC0	
-  
+#define QUERYADJ_UPDNB0_MASK    0x01
+#define QUERYADJ_UPDNB1_MASK    0xC0
+
   //DEBUG_PIN5_HIGH;
 
   unsigned char updn = (cmd[0] & QUERYADJ_UPDNB0_MASK) << 2;
@@ -1638,42 +1691,42 @@ inline void handle_queryadjust(volatile short nextState)
 
   // pick Q randomly
   slot_counter = Q >> shift;
-          
+
   // slot counter built and it's 0. we can send a reply!
   if (slot_counter == 0)
   {
-	// compute a RN16
-	loadRN16();   
-   
-	// compute a CRC
-	queryReplyCRC = crc16_ccitt(&queryReply[0],2);
-	queryReply[3] = (unsigned char)queryReplyCRC;
-	queryReply[2] = (unsigned char)__swap_bytes(queryReplyCRC);
-    
-	TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
-	TAR = 0;
-    
-	// send out the packet, and transition to STATE_REPLY
-	sendToReader(&queryReply[0], 17); 
-	state = nextState;
-    
-	// mix up the RN16 table a bit for next time
-   	 mixupRN16();
+    // compute a RN16
+    loadRN16();
+
+    // compute a CRC
+    queryReplyCRC = crc16_ccitt(&queryReply[0],2);
+    queryReply[3] = (unsigned char)queryReplyCRC;
+    queryReply[2] = (unsigned char)__swap_bytes(queryReplyCRC);
+
+    TACCTL1 &= ~CCIE;     // Disable capturing and comparing interrupt
+    TAR = 0;
+
+    // send out the packet, and transition to STATE_REPLY
+    sendToReader(&queryReply[0], 17);
+    state = nextState;
+
+    // mix up the RN16 table a bit for next time
+     mixupRN16();
   }
   else
   {
-	// slot counter isn't 0, so we don't send a reply. We wait for a
-	// followup QueryRep or QueryAdjust command. In the meantime,
-	// we transition to STATE_ARBITRATE.
-	state = STATE_ARBITRATE;
+    // slot counter isn't 0, so we don't send a reply. We wait for a
+    // followup QueryRep or QueryAdjust command. In the meantime,
+    // we transition to STATE_ARBITRATE.
+    state = STATE_ARBITRATE;
   }
-  
+
   //DEBUG_PIN5_LOW;
-  
+
 #else
 
   // we don't care about slots, so just send the packet and go to STATE_REPLY.
-  sendToReader(&queryReply[0], 17); 
+  sendToReader(&queryReply[0], 17);
   state = nextState;
 #endif
 }
@@ -1687,16 +1740,16 @@ inline void handle_ack(volatile short nextState)
   else
     while ( TAR < 400 );          // on the nose for 3.5MHz
   TAR = 0;
-  
+
 #if ENABLE_HANDLE_CHECKING
   //unsigned char ack_b0 = ((last_handle_b0 & 0xFC) >> 2) ;
   //ack_b0 |= 0x40;
   //unsigned char ack_b1 = ((last_handle_b1 & 0xFC) >> 2);
   //ack_b1 = ack_b1 || (last_handle_b0 & 0x03) << 6;
   //unsigned char ack_b2 = ((last_handle_b1 & 0x03) << 6);
-  
+
   //if ( ack_b0 != cmd[0] || ack_b1 != cmd[1] || ack_b2 != (cmd[2] & 0xC0) )
-  //    return; 
+  //    return;
 #endif
   //P1OUT &= ~RX_EN_PIN;   // turn off comparator
   // after that sends tagResponse
@@ -1716,19 +1769,18 @@ inline void handle_request_rn(volatile short nextState)
   TACCTL1 &= ~CCIE;
   TAR = 0;
   // FIXME FIXME
-  // here's a mystery: if I enable this line below, I clobber the follow-up
-  // read command. specifically, the read command's cmd[0] shows up as 0xFF.
-  // if i leave this line commented out, everything's fine.
-  // theory #1 was that the bit_in_enable line doesn't switch around fast
-  // enough. but i do the same thing for all the other commands, and i don't
-  // have any problems. also, the time space between request_rn and the read
-  // is *much larger* than betwen the other commands. theory #1 disproved.
-  // theory #2 was that i had fallen asleep and wasn't processing the incoming
-  // bits. but it turns out that i am wide awake. theory #2 disproven.
-  // theory #3. generally when i see 0xff in the cmd[0] field it means that
-  // the bit buffer got overwritten. as far as I can tell, it hasn't, and there's
-  // plenty of room in the receiving buffer. theory #3 disproven.
-  // hmmm.
+  // here's a mystery: if I enable this line below, I clobber the follow-up read
+  // command. specifically, the read command's cmd[0] shows up as 0xFF.  if i
+  // leave this line commented out, everything's fine.  theory #1 was that the
+  // bit_in_enable line doesn't switch around fast enough. but i do the same
+  // thing for all the other commands, and i don't have any problems. also, the
+  // time space between request_rn and the read is *much larger* than betwen the
+  // other commands. theory #1 disproved.  theory #2 was that i had fallen
+  // asleep and wasn't processing the incoming bits. but it turns out that i am
+  // wide awake. theory #2 disproven.  theory #3. generally when i see 0xff in
+  // the cmd[0] field it means that the bit buffer got overwritten. as far as I
+  // can tell, it hasn't, and there's plenty of room in the receiving buffer.
+  // theory #3 disproven.  hmmm.
   //P1OUT &= ~RX_EN_PIN;   // turn off comparator
   if ( NUM_REQRN_BITS == 42 )
     while ( TAR < 80 );
@@ -1742,28 +1794,32 @@ inline void handle_request_rn(volatile short nextState)
 
 inline void handle_read(volatile short nextState)
 {
-     
+
 #if SENSOR_DATA_IN_READ_COMMAND
-  
+
   //P1OUT &= ~RX_EN_PIN;   // turn off comparator
   TACCTL1 &= ~CCIE;
   TAR = 0;
-  
-  readReply[DATA_LENGTH_IN_BYTES] = queryReply[0];        // remember to restore correct RN before doing crc()
-  readReply[DATA_LENGTH_IN_BYTES+1] = queryReply[1];        // because crc() will shift bits to add
-  crc16_ccitt_readReply(DATA_LENGTH_IN_BYTES);    // leading "0" bit.
-   
-  // DATA_LENGTH_IN_BYTES*8 bits for data + 16 bits for the handle + 16 bits for the CRC + leading 0 + add one to number of bits for xmit code
+
+  readReply[DATA_LENGTH_IN_BYTES] = queryReply[0]; // remember to restore
+                                                   // correct RN before doing
+                                                   // crc()
+  readReply[DATA_LENGTH_IN_BYTES+1] = queryReply[1]; // because crc() will shift
+                                                     // bits to add
+  crc16_ccitt_readReply(DATA_LENGTH_IN_BYTES);     // leading "0" bit.
+
+  // DATA_LENGTH_IN_BYTES*8 bits for data + 16 bits for the handle + 16 bits for
+  // the CRC + leading 0 + add one to number of bits for xmit code
   sendToReader(&readReply[0], ((DATA_LENGTH_IN_BYTES*8)+16+16+1+1));
   state = nextState;
   delimiterNotFound = 1;
-            
+
 #elif SIMPLE_READ_COMMAND
 
   //P1OUT &= ~RX_EN_PIN;   // turn off comparator
   TACCTL1 &= ~CCIE;
   TAR = 0;
-  
+
 #define USE_COUNTER 1
 #if USE_COUNTER
   readReply[0] = __swap_bytes(read_counter);
@@ -1772,16 +1828,18 @@ inline void handle_read(volatile short nextState)
   readReply[0] = 0x03;
   readReply[1] = 0x04;
 #endif
-  readReply[2] = queryReply[0];        // remember to restore correct RN before doing crc()
-  readReply[3] = queryReply[1];        // because crc() will shift bits to add
-  crc16_ccitt_readReply(2);    // leading "0" bit.
-            
+  readReply[2] = queryReply[0]; // remember to restore correct RN before doing
+                                // crc()
+  readReply[3] = queryReply[1]; // because crc() will shift bits to add
+  crc16_ccitt_readReply(2);     // leading "0" bit.
+
   // after that sends tagResponse
-  // 16 bits for data + 16 bits for the handle + 16 bits for the CRC + leading 0 + add one to number of bits for seong's xmit code
+  // 16 bits for data + 16 bits for the handle + 16 bits for the CRC + leading 0
+  // + add one to number of bits for seong's xmit code
   sendToReader(&readReply[0], 50);
   state = nextState;
   delimiterNotFound = 1; // reset
-#endif          
+#endif
 }
 
 inline void handle_nak(volatile short nextState)
@@ -1792,7 +1850,7 @@ inline void handle_nak(volatile short nextState)
 }
 
 
-//****************************** SETUP TO RECEIVE  *************************************
+//************************** SETUP TO RECEIVE  *********************************
 // note: port interrupt can also reset, but it doesn't call this function
 //       because function call causes PUSH instructions prior to bit read
 //       at beginning of interrupt, which screws up timing.  so, remember
@@ -1800,32 +1858,37 @@ inline void handle_nak(volatile short nextState)
 inline void setup_to_receive()
 {
   //P4OUT &= ~BIT3;
-  _BIC_SR(GIE); // temporarily disable GIE so we can sleep and enable interrupts at the same time
-  
+  _BIC_SR(GIE); // temporarily disable GIE so we can sleep and enable interrupts
+                // at the same time
+
   P1OUT |= RX_EN_PIN;
-  
+
   delimiterNotFound = 0;
   // setup port interrupt on pin 1.2
   P1SEL &= ~BIT2;  //Disable TimerA2, so port interrupt can be used
-  // Setup timer. It has to setup because there is no setup time after done with port1 interrupt.
+  // Setup timer. It has to setup because there is no setup time after done with
+  // port1 interrupt.
   TACTL = 0;
   TAR = 0;
   TACCR0 = 0xFFFF;    // Set up TimerA0 register as Max
   TACCTL0 = 0;
   TACCTL1 = SCS + CAP;   //Synchronize capture source and capture mode
-  TACTL = TASSEL1 + MC1 + TAIE;  // SMCLK and continuous mode and Timer_A interrupt enabled.
+  TACTL = TASSEL1 + MC1 + TAIE;  // SMCLK and continuous mode and Timer_A
+                                 // interrupt enabled.
 
   // initialize bits
   bits = 0;
   // initialize dest
   dest = destorig;  // = &cmd[0]
-  // clear R6 bits of word counter from prior communications to prevent dest++ on 1st port interrupt
+  // clear R6 bits of word counter from prior communications to prevent dest++
+  // on 1st port interrupt
   asm("CLR R6");
-  
+
   P1IE = 0;
-  P1IES &= ~RX_PIN; // Make positive edge for port interrupt to detect start of delimiter
+  P1IES &= ~RX_PIN; // Make positive edge for port interrupt to detect start of
+                    // delimiter
   P1IFG = 0;  // Clear interrupt flag
-            
+
   P1IE  |= RX_PIN; // Enable Port1 interrupt
   _BIS_SR(LPM4_bits | GIE);
   return;
@@ -1842,7 +1905,7 @@ inline void sleep()
   P2OUT |= wisp_debug_2;
   P3OUT = 0x00;
 #endif
-  
+
   // enable port interrupt for voltage supervisor
   P2IES = 0;
   P2IFG = 0;
@@ -1850,13 +1913,14 @@ inline void sleep()
   P1IE = 0;
   P1IFG = 0;
   TACTL = 0;
-  
-  _BIC_SR(GIE); // temporarily disable GIE so we can sleep and enable interrupts at the same time
+
+  _BIC_SR(GIE); // temporarily disable GIE so we can sleep and enable interrupts
+                // at the same time
   P2IE |= VOLTAGE_SV_PIN; // Enable Port2 interrupt
-  
+
   if (is_power_good())
     P2IFG = VOLTAGE_SV_PIN;
-  
+
   _BIS_SR(LPM4_bits | GIE);
 
 //  P1OUT |= RX_EN_PIN;
@@ -1877,7 +1941,7 @@ unsigned short is_power_good()
 
 #pragma vector=PORT2_VECTOR
 __interrupt void Port2_ISR(void)   // (5-6 cycles) to enter interrupt
-{  
+{
   P2IFG = 0x00;
   P2IE = 0;       // Interrupt disable
   P1IFG = 0;
@@ -1906,14 +1970,15 @@ __interrupt void TimerA0_ISR(void)   // (5-6 cycles) to enter interrupt
 //*************************************************************************
 //************************ PORT 1 INTERRUPT *******************************
 
-// warning   :  Whenever the clock frequency changes, the value of TAR should be changed in aesterick lines
+// warning   :  Whenever the clock frequency changes, the value of TAR should be
+//              changed in aesterick lines
 // Pin Setup :  P1.2
 // Description : Port 1 interrupt is used as finding delimeter.
 
 #pragma vector=PORT1_VECTOR
 __interrupt void Port1_ISR(void)   // (5-6 cycles) to enter interrupt
 {
-  
+
 
 #if USE_2132
   asm("MOV TA0R, R7");  // move TAR to R7(count) register (3 CYCLES)
@@ -1929,9 +1994,11 @@ __interrupt void Port1_ISR(void)   // (5-6 cycles) to enter interrupt
   // bits != 0:
   asm("MOV #0000h, R5\n");          // bits = 0  (1 cycles)
 
-  asm("CMP #0010h, R7\n");          //************ this is finding delimeter (12.5us)  (2 cycles)*********/   2d  ->   14
+  asm("CMP #0010h, R7\n");          // finding delimeter (12.5us, 2 cycles)
+                                    // 2d -> 14
   asm("JNC delimiter_Value_Is_wrong\n");            //(2 cycles)
-  asm("CMP #0040h, R7");             //************ this is finding delimeter (12.5us)  (2 cycles)*********  43H
+  asm("CMP #0040h, R7");            // finding delimeter (12.5us, 2 cycles)
+                                    // 43H
   asm("JC  delimiter_Value_Is_wrong\n");
   asm("CLR P1IE");
 #if USE_2132
@@ -1977,7 +2044,7 @@ __interrupt void TimerA1_ISR(void)   // (6 cycles) to enter interrupt
     TAR = 0;               // reset timer (4 cycles)
     TACCTL1 &= ~CCIFG;      // must manually clear interrupt flag (4 cycles)
 
-    //<--------------up to here 26 cycles + 6 cyles of Interrupt == 32 cycles ---------------->
+    //<------up to here 26 cycles + 6 cyles of Interrupt == 32 cycles -------->
     asm("CMP #0003h, R5\n");      // if (bits >= 3).  it will do store bits
     asm("JGE bit_Is_Over_Three\n");
     // bit is not 3
@@ -1985,7 +2052,7 @@ __interrupt void TimerA1_ISR(void)   // (6 cycles) to enter interrupt
     asm("JEQ bit_Is_Two\n");         // if (bits == 2).
 
     // <----------------- bit is not 2 ------------------------------->
-    asm("CMP #0001h, R5\n");      // if ( bits == 1). it will measure RTcal value.
+    asm("CMP #0001h, R5\n");      // if (bits == 1) -- measure RTcal value.
     asm("JEQ bit_Is_One\n");          // bits == 1
 
     // <-------------------- this is bit == 0 case --------------------->
@@ -2000,7 +2067,8 @@ __interrupt void TimerA1_ISR(void)   // (6 cycles) to enter interrupt
     asm("MOV R7, R9\n");       // 1 cycle
     asm("RRA R7\n");    // R7(count) is divided by 2.   1 cycle
     asm("MOV #0FFFFh, R8\n");   // R8(pivot) is set to max value    1 cycle
-    asm("SUB R7, R8\n");        // R8(pivot) = R8(pivot) -R7(count/2) make new R8(pivot) value     1 cycle
+    asm("SUB R7, R8\n");        // R8(pivot) = R8(pivot) -R7(count/2) make new
+                                // R8(pivot) value     1 cycle
     asm("INC R5\n");        // bits++
     asm("CLR R6\n");
     asm("RETI\n");
@@ -2008,44 +2076,57 @@ __interrupt void TimerA1_ISR(void)   // (6 cycles) to enter interrupt
 
     // <-------------------- this is bit == 2 case --------------------->
     asm("bit_Is_Two:\n");
-    asm("CMP R9, R7\n");    // if (count > (R9)(180)) this is hardcoded number, so have  to change to proper value
+    asm("CMP R9, R7\n");    // if (count > (R9)(180)) this is hardcoded number,
+                            // so have  to change to proper value
     asm("JGE this_Is_TRcal\n");
     // this is data
     asm("this_Is_Data_Bit:\n");
     asm("ADD R8, R7\n");   // count = count + pivot
-    // store bit by shifting carry flag into cmd[bits]=(dest*) and increment dest*  // (5 cycles)
-    asm("ADDC.b @R4+,-1(R4)\n"); // roll left (emulated by adding to itself == multiply by 2 + carry)
-    // R6 lets us know when we have 8 bits, at which point we INC dest*            // (1 cycle)
+    // store bit by shifting carry flag into cmd[bits]=(dest*) and increment
+    // dest* (5 cycles)
+    asm("ADDC.b @R4+,-1(R4)\n"); // roll left (emulated by adding to itself ==
+                                 // multiply by 2 + carry)
+    // R6 lets us know when we have 8 bits, at which point we INC dest* (1
+    // cycle)
     asm("INC R6\n");
-    asm("CMP #0008,R6\n\n");   // undo increment of dest* (R4) until we have 8 bits
+    asm("CMP #0008,R6\n\n");   // undo increment of dest* (R4) until we have 8
+                               // bits
     asm("JGE out_p\n");
     asm("DEC R4\n");
-    asm("out_p:\n");           // decrement R4 if we haven't gotten 16 bits yet  (3 or 4 cycles)
+    asm("out_p:\n");           // decrement R4 if we haven't gotten 16 bits yet
+                               // (3 or 4 cycles)
     asm("BIC #0008h,R6\n");   // when R6=8, this will set R6=0   (1 cycle)
     asm("INC R5\n");
     asm("RETI");
     // <------------------ end of bit 2 ------------------------------>
 
     asm("this_Is_TRcal:\n");
-    asm("MOV R7, R5\n");    // bits = count. use bits(R5) to assign new value of TRcal
+    asm("MOV R7, R5\n");    // bits = count. use bits(R5) to assign new value of
+                            // TRcal
     TRcal = bits;       // assign new value     (4 cycles)
-    asm("MOV #0003h, R5\n");      // bits = 3..assign 3 to bits, so it will keep track of current bits    (2 cycles)
+    asm("MOV #0003h, R5\n");      // bits = 3..assign 3 to bits, so it will keep
+                                  // track of current bits    (2 cycles)
     asm("CLR R6\n"); // (1 cycle)
     asm("RETI");
 
    // <------------- this is bits >= 3 case ----------------------->
     asm("bit_Is_Over_Three:\n");     // bits >= 3 , so store bits
     asm("ADD R8, R7\n");    // R7(count) = R8(pivot) + R7(count),
-    // store bit by shifting carry flag into cmd[bits]=(dest*) and increment dest*  // (5 cycles)
-    asm("ADDC.b @R4+,-1(R4)\n"); // roll left (emulated by adding to itself == multiply by 2 + carry)
-    // R6 lets us know when we have 8 bits, at which point we INC dest*            // (1 cycle)
+    // store bit by shifting carry flag into cmd[bits]=(dest*) and increment
+    // dest* (5 cycles)
+    asm("ADDC.b @R4+,-1(R4)\n"); // roll left (emulated by adding to itself ==
+                                 // multiply by 2 + carry)
+    // R6 lets us know when we have 8 bits, at which point we INC dest* (1
+    // cycle)
     asm("INC R6\n");
-    asm("CMP #0008,R6\n");   // undo increment of dest* (R4) until we have 8 bits
+    asm("CMP #0008,R6\n");   // undo increment of dest* (R4) until we have 8
+                             // bits
     asm("JGE out_p1\n");
     asm("DEC R4\n");
-    asm("out_p1:\n");           // decrement R4 if we haven't gotten 16 bits yet  (3 or 4 cycles)
-    asm("BIC #0008h,R6\n");   // when R6=8, this will set R6=0   (1 cycle)
-    asm("INC R5\n");              // bits++
+    asm("out_p1:\n");        // decrement R4 if we haven't gotten 16 bits yet
+                             // (3 or 4 cycles)
+    asm("BIC #0008h,R6\n");  // when R6=8, this will set R6=0   (1 cycle)
+    asm("INC R5\n");         // bits++
     asm("RETI\n");
     // <------------------ end of bit is over 3 ------------------------------>
 }
@@ -2087,19 +2168,21 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
 #endif
 
   //TACTL |= TASSEL1 + MC1 + TAIE;
-  //TACCTL1 |= SCS + CAP;	//initially, it set up as capturing rising edge.
+  //TACCTL1 |= SCS + CAP;   //initially, it set up as capturing rising edge.
 
-/**************************************************************************************************
-*   The starting of the transmitting code. Transmitting code must send 4 or 16 of M/LF, then send
-*   010111 preamble before sending data package. TRext determines how many M/LFs are sent.
+/*******************************************************************************
+*   The starting of the transmitting code. Transmitting code must send 4 or 16
+*   of M/LF, then send 010111 preamble before sending data package. TRext
+*   determines how many M/LFs are sent.
 *
 *   Used Register
-*   R4 = CMD address, R5 = bits, R6 = counting 16 bits, R7 = 1 Word data, R9 = temp value for loop
-*   R10 = temp value for the loop, R13 = 16 bits compare, R14 = timer_value for 11, R15 = timer_value for 5
-***************************************************************************************************/
+*   R4 = CMD address, R5 = bits, R6 = counting 16 bits, R7 = 1 Word data, R9 =
+*   temp value for loop R10 = temp value for the loop, R13 = 16 bits compare,
+*   R14 = timer_value for 11, R15 = timer_value for 5
+*******************************************************************************/
 
 
-  //<-------------- The below code will initiate some set up ---------------------->//
+  //<-------- The below code will initiate some set up ---------------------->//
     //asm("MOV #05h, R14");
     //asm("MOV #02h, R15");
     bits = TRext;       // 6 cycles
@@ -2115,11 +2198,16 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
 
     //
     asm("otherSetup:");
-    bits = numOfBits;                // (3 cycles).  This value will be adjusted. if numOfBit is constant, it takes 2 cycles
-    asm("MOV #0bh, R14");     // (2 cycles) R14 is used as timer value 11, it will be 2 us in 6 MHz
-    asm("MOV #05h, R15");      // (2 cycles) R15 is used as tiemr value 5, it will be 1 us in 6 MHz
-    asm("MOV @R4+, R7");      // (2 cycles) Assign data to R7
-    asm("MOV #0010h, R13");   // (2 cycles) Assign decimal 16 to R13, so it will reduce the 1 cycle from below code
+    bits = numOfBits;                // (3 cycles).  This value will be
+                                     // adjusted. if numOfBit is constant, it
+                                     // takes 2 cycles
+    asm("MOV #0bh, R14"); // (2 cycles) R14 is used as timer value 11, it will
+                          // be 2 us in 6 MHz
+    asm("MOV #05h, R15"); // (2 cycles) R15 is used as tiemr value 5, it will be
+                          // 1 us in 6 MHz
+    asm("MOV @R4+, R7");  // (2 cycles) Assign data to R7
+    asm("MOV #0010h, R13");   // (2 cycles) Assign decimal 16 to R13, so it will
+                              // reduce the 1 cycle from below code
     asm("MOV R13, R6");       // (1 cycle)
     asm("SWPB R7");           // (1 cycle)    Swap Hi-byte and Low byte
     asm("NOP");
@@ -2139,12 +2227,16 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
     //asm("NOP");   // 9
     // <---------- End of 1 us ------------------------------
     // The below code will create the number of M/LF.  According to the spec,
-    // if the TRext is 0, there are 4 M/LF.  If the TRext is 1, there are 16 M/LF
-    // The upper code executed 1 M/LF, so the count(R9) should be number of M/LF - 1
-    //asm("MOV #000fh, R9");    // 2 cycles    *** this will chagne to right value
+    // if the TRext is 0, there are 4 M/LF.  If the TRext is 1, there are 16
+    // M/LF
+    // The upper code executed 1 M/LF, so the count(R9) should be number of M/LF
+    // - 1
+    //asm("MOV #000fh, R9");    // 2 cycles  *** this will chagne to right value
     asm("MOV #0001h, R10");   // 1 cycles
-    // The below code will create the number base encoding waveform., so the number of count(R9) should be times of M
-    // For example, if M = 2 and TRext are 1(16, the number of count should be 32.
+    // The below code will create the number base encoding waveform., so the
+    // number of count(R9) should be times of M
+    // For example, if M = 2 and TRext are 1(16, the number of count should be
+    // 32.
     asm("M_LF_Count:");
     asm("NOP");   // 1
     asm("NOP");   // 2
@@ -2171,10 +2263,12 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
     asm("JMP M_LF_Count");      // 2 cycles
 
     asm("M_LF_Count_End:");
-    // this code is preamble for 010111 , but for the loop, it will only send 01011
+    // this code is preamble for 010111 , but for the loop, it will only send
+    // 01011
     asm("MOV #5c00h, R9");      // 2 cycles
     asm("MOV #0006h, R10");     // 2 cycles
-    // this should be counted as 0. Therefore, Assembly DEC line should be 1 after executing
+    // this should be counted as 0. Therefore, Assembly DEC line should be 1
+    // after executing
     asm("Preamble_Loop:");
     asm("DEC R10");               // 1 cycle
     asm("JZ last_preamble_set");          // 2 cycle
@@ -2224,7 +2318,7 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
     asm("JMP Preamble_Loop");     // 2 cycles .. 24
 
     asm("last_preamble_set:");
-    asm("NOP");			// 4
+    asm("NOP");         // 4
     asm("NOP");
     asm("NOP");    // TURN ON
     asm("NOP");
@@ -2250,7 +2344,8 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
     //<------------- end of initial set up
 
 /***********************************************************************
-*   The main loop code for transmitting data in 6 MHz.  This will transmit data in real time.
+*   The main loop code for transmitting data in 6 MHz.  This will transmit data
+*   in real time.
 *   R5(bits) and R6(word count) must be 1 bigger than desired value.
 *   Ex) if you want to send 16 bits, you have to store 17 to R5.
 ************************************************************************/
@@ -2262,7 +2357,7 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
     //<--------------loop condition ------------
     asm("NOP");                                 // 1 cycle
     asm("RLC R7");                              // 1 cycle
-    asm("JNC bit_is_zero");	                // 2 cycles  ..7
+    asm("JNC bit_is_zero");                 // 2 cycles  ..7
 
     // bit is 1
     asm("bit_is_one:");
@@ -2273,7 +2368,8 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
 #endif                // 4 cycles   ..11
     asm("DEC R6");                              // 1 cycle  ..12
     asm("JNZ bit_Count_Is_Not_16");              // 2 cycle    .. 14
-    // This code will assign new data from reply and then swap bytes.  After that, update R6 with 16 bits
+    // This code will assign new data from reply and then swap bytes.  After
+    // that, update R6 with 16 bits
     //asm("MOV @R4+, R7");
 #if USE_2132
     asm("MOV R15, TA0CCR0");                   // 4 cycles   .. 20
@@ -2298,38 +2394,39 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
 #endif
 
     // bit is 0, so it will check that next bit is 0 or not
-    asm("bit_is_zero:");				// up to 7 cycles
+    asm("bit_is_zero:");                // up to 7 cycles
     asm("DEC R6");                      // 1 cycle   .. 8
     asm("JNE bit_Count_Is_Not_16_From0");           // 2 cycles  .. 10
     // bit count is 16
     asm("DEC R5");                      // 1 cycle   .. 11
     asm("JEQ Thirteen_Cycle_Loop_End");     // 2 cycle   .. 13
-    // This code will assign new data from reply and then swap bytes.  After that, update R6 with 16 bits
+    // This code will assign new data from reply and then swap bytes.  After
+    // that, update R6 with 16 bits
     asm("MOV @R4+,R7");                 // 2 cycles     15
     asm("SWPB R7");                     // 1 cycle      16
     asm("MOV R13, R6");                 // 1 cycles     17
     // End of assigning new data byte
-    asm("RLC R7");		        // 1 cycles     18
-    asm("JC nextBitIs1");	        // 2 cycles  .. 20
+    asm("RLC R7");              // 1 cycles     18
+    asm("JC nextBitIs1");           // 2 cycles  .. 20
     // bit is 0
 #if USE_2132
     asm("MOV R14, TA0CCR0");             // 4 cycles  .. 24
 #else
     asm("MOV R14, TACCR0");             // 4 cycles  .. 24
 #endif
-    // Next bit is 0 , it is 00 case	
+    // Next bit is 0 , it is 00 case
     asm("JMP seq_zero");
 
 // <---------this code is 00 case with no 16 bits.
     asm("bit_Count_Is_Not_16_From0:");                  // up to 10 cycles
     asm("DEC R5");                          // 1 cycle      11
     asm("JEQ Thirteen_Cycle_Loop_End");         // 2 cycle    ..13
-    asm("NOP");         	            // 1 cycles    ..14
+    asm("NOP");                         // 1 cycles    ..14
     asm("NOP");                             // 1 cycles    ..15
     asm("NOP");                             // 1 cycles    ..16
     asm("NOP");                             // 1 cycles    ..17
-    asm("RLC R7");	                    // 1 cycle     .. 18
-    asm("JC nextBitIs1");	            // 2 cycles    ..20
+    asm("RLC R7");                      // 1 cycle     .. 18
+    asm("JC nextBitIs1");               // 2 cycles    ..20
 #if USE_2132
     asm("MOV R14, TA0CCR0");               // 4 cycles   .. 24
 #else
@@ -2420,8 +2517,9 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
 
 
 /**
- * This code comes from the Open Tag Systems Protocol Reference Guide version 1.1
- * dated 3/23/2004. (http://www.opentagsystems.com/pdfs/downloads/OTS_Protocol_v11.pdf)
+ * This code comes from the Open Tag Systems Protocol Reference Guide version
+ * 1.1 dated 3/23/2004.
+ * (http://www.opentagsystems.com/pdfs/downloads/OTS_Protocol_v11.pdf)
  * No licensing information accompanied the code snippet.
  **/
 unsigned short crc16_ccitt(volatile unsigned char *data, unsigned short n) {
@@ -2446,11 +2544,13 @@ unsigned short crc16_ccitt(volatile unsigned char *data, unsigned short n) {
 
 inline void crc16_ccitt_readReply(unsigned int numDataBytes)
 {
-  
+
   // shift everything over by 1 to accomodate leading "0" bit.
   // first, grab address of beginning of array
-  readReply[numDataBytes + 2] = 0; // clear out this spot for the loner bit of handle
-  readReply[numDataBytes + 4] = 0; // clear out this spot for the loner bit of crc
+  readReply[numDataBytes + 2] = 0; // clear out this spot for the loner bit of
+                                   // handle
+  readReply[numDataBytes + 4] = 0; // clear out this spot for the loner bit of
+                                   // crc
   bits = (unsigned short) &readReply[0];
   // shift all bytes and later use only data + handle
   asm("RRC.b @R5+");
@@ -2470,20 +2570,22 @@ inline void crc16_ccitt_readReply(unsigned int numDataBytes)
   asm("RRC.b @R5+");
   asm("RRC.b @R5+");
   asm("RRC.b @R5+");
-  asm("RRC.b @R5+");  
+  asm("RRC.b @R5+");
   // store loner bit in array[numDataBytes+2] position
   asm("RRC.b @R5+");
   // make first bit 0
   readReply[0] &= 0x7f;
-  
+
   // compute crc on data + handle bytes
   readReplyCRC = crc16_ccitt(&readReply[0], numDataBytes + 2);
   readReply[numDataBytes + 4] = readReply[numDataBytes + 2];
   // XOR the MSB of CRC with loner bit.
-  readReply[numDataBytes + 4] ^= __swap_bytes(readReplyCRC); // XOR happens with MSB of lower nibble
+  readReply[numDataBytes + 4] ^= __swap_bytes(readReplyCRC); // XOR happens with
+                                                             // MSB of lower
+                                                             // nibble
   // Just take the resulting bit, not the whole byte
   readReply[numDataBytes + 4] &= 0x80;
-  
+
   unsigned short mask = __swap_bytes(readReply[numDataBytes + 4]);
   mask >>= 3;
   mask |= (mask >> 7);
@@ -2491,9 +2593,10 @@ inline void crc16_ccitt_readReply(unsigned int numDataBytes)
   mask >>= 1;  // this is because the loner bit pushes the CRC to the left by 1
   // but we don't shift the crc because it should get pushed out by 1 anyway
   readReplyCRC ^= mask;
-  
+
   readReply[numDataBytes + 3] = (unsigned char) readReplyCRC;
-  readReply[numDataBytes + 2] |= (unsigned char) (__swap_bytes(readReplyCRC) & 0x7F);
+  readReply[numDataBytes + 2] |= (unsigned char) (__swap_bytes(readReplyCRC) &
+          0x7F);
 }
 
 #if 0
@@ -2522,11 +2625,12 @@ unsigned char crc5(volatile unsigned char *buf, unsigned short numOfBits)
 #if ENABLE_SLOTS
 
 void lfsr()
-{ 
+{
     // calculate LFSR
-    rn16 = (rn16 << 1) | (((rn16 >> 15) ^ (rn16 >> 13) ^ (rn16 >> 9) ^ (rn16 >> 8)) & 1);
+    rn16 = (rn16 << 1) | (((rn16 >> 15) ^ (rn16 >> 13) ^
+                (rn16 >> 9) ^ (rn16 >> 8)) & 1);
     rn16 = rn16 & 0xFFFF;
-    
+
     // fit 2^Q-1
     rn16 = rn16>>(15-Q);
 }
@@ -2549,7 +2653,7 @@ inline void loadRN16()
     queryReply[0] = 0xf0;
     queryReply[1] = 0x0f;
 #endif
-  
+
 }
 
 inline void mixupRN16()
@@ -2557,12 +2661,12 @@ inline void mixupRN16()
   unsigned short tmp;
   unsigned short newQ = 0;
   unsigned short swapee_index = 0;
-  
+
   newQ = RN16[shift] & 0xF;
   swapee_index = RN16[newQ];
   tmp = RN16[shift];
   RN16[Q] = RN16[swapee_index];
-  RN16[swapee_index] = tmp;  
+  RN16[swapee_index] = tmp;
 }
 
 
@@ -2573,64 +2677,65 @@ inline void mixupRN16()
 void initialize_sessions()
 {
 
-	SL = SL_NOT_ASSERTED;	// selected flag powers up deasserted
-	// all inventory flags power up in state 'A'
-	session_table[S0_INDEX] = SESSION_STATE_A;
+    SL = SL_NOT_ASSERTED;   // selected flag powers up deasserted
+    // all inventory flags power up in state 'A'
+    session_table[S0_INDEX] = SESSION_STATE_A;
         session_table[S1_INDEX] = SESSION_STATE_A;
         session_table[S2_INDEX] = SESSION_STATE_A;
         session_table[S3_INDEX] = SESSION_STATE_A;
 }
-void handle_session_timeout() 
+void handle_session_timeout()
 {
 #if 0
-	// selected flag is persistent throughout power up state
-	// S0 inventory flag is persistent throughout power up state
-	// S1 is reset, unless it is in the middle of an inventory round
-	if ( ! inInventoryRound ) session_table[S1_INDEX] = SESSION_STATE_A;
-	// S2 and S3 are always refreshed
-	session_table[S2_INDEX] = SESSION_STATE_A;
-	session_table[S3_INDEX] = SESSION_STATE_A;
+    // selected flag is persistent throughout power up state
+    // S0 inventory flag is persistent throughout power up state
+    // S1 is reset, unless it is in the middle of an inventory round
+    if ( ! inInventoryRound ) session_table[S1_INDEX] = SESSION_STATE_A;
+    // S2 and S3 are always refreshed
+    session_table[S2_INDEX] = SESSION_STATE_A;
+    session_table[S3_INDEX] = SESSION_STATE_A;
 #endif
 }
 #endif
 
 #if ENABLE_SESSIONS
-// compare two chunks of memory, starting at given bit offsets (relative to the starting byte, that is).
-// startingBitX is a range from 7 (MSbit) to 0 (LSbit). Len is number of bits. Returns a
-// 1 if they match and a 0 if they don't match.
+// compare two chunks of memory, starting at given bit offsets (relative to the
+// starting byte, that is).
+// startingBitX is a range from 7 (MSbit) to 0 (LSbit). Len is number of bits.
+// Returns a // 1 if they match and a 0 if they don't match.
 int bitCompare(unsigned char *startingByte1, unsigned short startingBit1,
-		unsigned char *startingByte2, unsigned short startingBit2,
-		unsigned short len) {
-                  
+        unsigned char *startingByte2, unsigned short startingBit2,
+        unsigned short len) {
+
         unsigned char test1, test2;
 
-	while ( len-- ) {
+    while ( len-- ) {
 
-		test1 = (*startingByte1) & ( 1 << startingBit1 );
-		test2 = (*startingByte2) & ( 1 << startingBit2 );
+        test1 = (*startingByte1) & ( 1 << startingBit1 );
+        test2 = (*startingByte2) & ( 1 << startingBit2 );
 
-		if ( (test1 == 0 && test2 != 0) || ( test1 != 0 && test2 == 0 ) ) {
-			return 0;
-		}
+        if ( (test1 == 0 && test2 != 0) || ( test1 != 0 && test2 == 0 ) ) {
+            return 0;
+        }
 
-		if ( len == 0 ) return 1;
+        if ( len == 0 ) return 1;
 
-		if ( startingBit1 == 0 ) {
-			startingByte1++;
-			startingBit1 = 7;
-		}
-		else
-			startingBit1--;
+        if ( startingBit1 == 0 ) {
+            startingByte1++;
+            startingBit1 = 7;
+        }
+        else
+            startingBit1--;
 
-		if ( startingBit2 == 0 ) {
-			startingByte2++;
-			startingBit2 = 7;
-		}
-		else
-			startingBit2--;
+        if ( startingBit2 == 0 ) {
+            startingByte2++;
+            startingBit2 = 7;
+        }
+        else
+            startingBit2--;
 
-	}
-        
+    }
+
         return 1;
 }
 #endif
