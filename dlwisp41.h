@@ -27,6 +27,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // "Blue WISP"
 
 // MSP430F2132
+#include <msp430x21x2.h>
+#define USE_2132  1
 
 // See wisp.wikispaces.com for a schematic.
 

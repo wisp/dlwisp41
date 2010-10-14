@@ -151,9 +151,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "rfid_commands.h"
 
 #if(WISP_VERSION == BLUE_WISP)
-  #include <msp430x21x2.h>
-  #include "pinDefWISP4.1DL.h"
-  #define USE_2132  1
+  #include "dlwisp41.h"
 #else
   #error "WISP Version not supported"
 #endif
