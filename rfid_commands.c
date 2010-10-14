@@ -1,3 +1,5 @@
+#include "rfid_commands.h"
+
 inline void handle_query(volatile short nextState)
 {
   TAR = 0;
