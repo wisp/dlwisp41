@@ -236,11 +236,11 @@ unsigned char RN16[23];
 
 // compiler uses working register 4 as a global variable
 // Pointer to &cmd[bits]
-volatile __no_init __regvar unsigned char* dest @ 4;
+volatile unsigned char* dest;
 
 // compiler uses working register 5 as a global variable
 // count of bits received from reader
-volatile __no_init __regvar unsigned short bits @ 5;
+// volatile __no_init __regvar unsigned short bits @ 5;
 unsigned short TRcal=0;
 
 #define STATE_READY               0
@@ -319,14 +319,14 @@ unsigned short crc16_ccitt(volatile unsigned char *data, unsigned short n);
 #if 0
 unsigned char crc5(volatile unsigned char *buf, unsigned short numOfBits);
 #endif
-void setup_to_receive();
-void sleep();
+static inline void setup_to_receive();
+static inline void sleep();
 unsigned short is_power_good();
 #if ENABLE_SLOTS
 void lfsr();
 inline void loadRN16(), mixupRN16();
 #endif
-void crc16_ccitt_readReply(unsigned int);
+static inline void crc16_ccitt_readReply(unsigned int);
 int i;
 static inline void handle_query(volatile short nextState);
 static inline void handle_queryrep(volatile short nextState);
@@ -534,7 +534,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
         //////////////////////////////////////////////////////////////////////
-        if ( bits == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
+        if ( _get_R5_register() == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
         {
 #if MONITOR_DEBUG_ON
             // for monitor - set QUERY PKT debug line - 01001 - 9
@@ -561,7 +561,7 @@ int main(void)
         // process the SELECT command
         //////////////////////////////////////////////////////////////////////
         // @ short distance has slight impact on performance
-        else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
+        else if ( _get_R5_register() >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
           
 #if MONITOR_DEBUG_ON
@@ -579,7 +579,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // got >= 22 bits, and it's not the beginning of a select. just reset.
         //////////////////////////////////////////////////////////////////////
-        else if ( bits >= MAX_NUM_QUERY_BITS && ( ( cmd[0] & 0xF0 ) != 0xA0 ) )
+        else if ( _get_R5_register() >= MAX_NUM_QUERY_BITS && ( ( cmd[0] & 0xF0 ) != 0xA0 ) )
         { 
           do_nothing();
           state = STATE_READY;
@@ -600,7 +600,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
         //////////////////////////////////////////////////////////////////////
-        if ( bits == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
+        if ( _get_R5_register() == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
         {
 #if MONITOR_DEBUG_ON
           // for monitor - set QUERY PKT debug line - 01001 - 9
@@ -626,8 +626,8 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // got >= 22 bits, and it's not the beginning of a select. just reset.
         //////////////////////////////////////////////////////////////////////
-        //else if ( bits >= NUM_QUERY_BITS )
-        else if ( bits >= MAX_NUM_QUERY_BITS && ( ( cmd[0] & 0xF0 ) != 0xA0 ) )
+        //else if ( _get_R5_register() >= NUM_QUERY_BITS )
+        else if ( _get_R5_register() >= MAX_NUM_QUERY_BITS && ( ( cmd[0] & 0xF0 ) != 0xA0 ) )
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
@@ -648,7 +648,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYREP command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) )
+        else if ( _get_R5_register() == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) )
         {
 #if MONITOR_DEBUG_ON
           // for monitor - set QUERY_REP debug line - 01100 - 12
@@ -674,7 +674,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYADJUST command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits == NUM_QUERYADJ_BITS  && ( ( cmd[0] & 0xF8 ) == 0x48 ) )
+        else if ( _get_R5_register() == NUM_QUERYADJ_BITS  && ( ( cmd[0] & 0xF8 ) == 0x48 ) )
         {
           // at short distance, you get better performance (~52 t/s) if you
           // do setup_to_receive() rather than dnf =1. not sure that this holds
@@ -698,7 +698,7 @@ int main(void)
         // process the SELECT command
         //////////////////////////////////////////////////////////////////////
         // @ short distance has slight impact on performance
-        else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
+        else if ( _get_R5_register() >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
 #if MONITOR_DEBUG_ON
           // for monitor - set SELECT debug line - 01110 - 14
@@ -732,7 +732,7 @@ int main(void)
         ///////////////////////////////////////////////////////////////////////
         // process the ACK command
         ///////////////////////////////////////////////////////////////////////
-        if ( bits == NUM_ACK_BITS  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
+        if ( _get_R5_register() == NUM_ACK_BITS  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
         {
 #if MONITOR_DEBUG_ON
           // for monitor - set ACK PKT debug line - 01010 - 10
@@ -765,7 +765,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
         //////////////////////////////////////////////////////////////////////
-        if ( bits == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
+        if ( _get_R5_register() == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
         {
 #if MONITOR_DEBUG_ON
           // for monitor - set QUERY PKT debug line - 01001 - 9
@@ -788,7 +788,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYREP command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) )
+        else if ( _get_R5_register() == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) )
         {
 #if MONITOR_DEBUG_ON
           // for monitor - set QUERY_REP debug line - 01100 - 12
@@ -818,7 +818,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYADJUST command
         //////////////////////////////////////////////////////////////////////
-          else if ( bits == NUM_QUERYADJ_BITS  && ( ( cmd[0] & 0xF8 ) == 0x48 ) )
+          else if ( _get_R5_register() == NUM_QUERYADJ_BITS  && ( ( cmd[0] & 0xF8 ) == 0x48 ) )
         {
 #if MONITOR_DEBUG_ON
           // for monitor - set QUERY_ADJ debug line - 01101 - 13
@@ -845,7 +845,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the SELECT command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
+        else if ( _get_R5_register() >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
 #if MONITOR_DEBUG_ON
           // for monitor - set SELECT debug line - 01110 - 14
@@ -870,7 +870,7 @@ int main(void)
           
           //setup_to_receive();
         } // select command
-        else if ( bits >= MAX_NUM_QUERY_BITS && ( ( cmd[0] & 0xF0 ) != 0xA0 ) && ( ( cmd[0] & 0xF0 ) != 0x80 ) )
+        else if ( _get_R5_register() >= MAX_NUM_QUERY_BITS && ( ( cmd[0] & 0xF0 ) != 0xA0 ) && ( ( cmd[0] & 0xF0 ) != 0x80 ) )
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
@@ -887,7 +887,7 @@ int main(void)
         /////////////////////////////////////////////////////////////////////
         // process the REQUEST_RN command
         //////////////////////////////////////////////////////////////////////
-        if ( bits >= NUM_REQRN_BITS && ( cmd[0] == 0xC1 ) )
+        if ( _get_R5_register() >= NUM_REQRN_BITS && ( cmd[0] == 0xC1 ) )
         {
 #if 1
 #if MONITOR_DEBUG_ON
@@ -919,7 +919,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
         //////////////////////////////////////////////////////////////////////
-        if ( bits == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
+        if ( _get_R5_register() == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
         {
 #if MONITOR_DEBUG_ON
               // for monitor - set QUERY PKT debug line - 01001 - 9
@@ -949,8 +949,8 @@ int main(void)
         // this code doesn't seem to get exercised in the real world. if i ever
         // ran into a reader that generated an ack in an acknowledged state,
         // this code might need some work.
-        //else if ( bits == 20  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
-        else if ( bits == NUM_ACK_BITS  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
+        //else if ( _get_R5_register() == 20  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
+        else if ( _get_R5_register() == NUM_ACK_BITS  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
         {
 #if MONITOR_DEBUG_ON
               // for monitor - set ACK PKT debug line - 01010 - 10
@@ -976,7 +976,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYREP command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) )
+        else if ( _get_R5_register() == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) )
         {
           // in the acknowledged state, rfid chips don't respond to queryrep commands
           do_nothing();
@@ -987,7 +987,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYADJUST command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits == NUM_QUERYADJ_BITS  && ( ( cmd[0] & 0xF8 ) == 0x48 ) )
+        else if ( _get_R5_register() == NUM_QUERYADJ_BITS  && ( ( cmd[0] & 0xF8 ) == 0x48 ) )
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
@@ -998,7 +998,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the SELECT command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
+        else if ( _get_R5_register() >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
           //DEBUG_PIN5_HIGH;
           handle_select(STATE_READY); 
@@ -1008,8 +1008,8 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the NAK command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits >= 10 && ( cmd[0] == 0xC0 ) )
-        //else if ( bits >= NUM_NAK_BITS && ( cmd[0] == 0xC0 ) )
+        else if ( _get_R5_register() >= 10 && ( cmd[0] == 0xC0 ) )
+        //else if ( _get_R5_register() >= NUM_NAK_BITS && ( cmd[0] == 0xC0 ) )
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
@@ -1021,7 +1021,7 @@ int main(void)
         // process the READ command
         //////////////////////////////////////////////////////////////////////
         // warning: won't work for read addrs > 127d
-        if ( bits == NUM_READ_BITS && ( cmd[0] == 0xC2 ) )
+        if ( _get_R5_register() == NUM_READ_BITS && ( cmd[0] == 0xC2 ) )
         {
           //DEBUG_PIN5_HIGH;
           handle_read(STATE_ARBITRATE);
@@ -1033,7 +1033,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the ACCESS command
         //////////////////////////////////////////////////////////////////////
-        if ( bits >= 56  && ( cmd[0] == 0xC6 ) )
+        if ( _get_R5_register() >= 56  && ( cmd[0] == 0xC6 ) )
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
@@ -1042,7 +1042,7 @@ int main(void)
           //DEBUG_PIN5_LOW;
         }
 #endif
-        else if ( bits >= MAX_NUM_READ_BITS )
+        else if ( _get_R5_register() >= MAX_NUM_READ_BITS )
         {
           //DEBUG_PIN5_HIGH;
           //do_nothing();
@@ -1053,7 +1053,7 @@ int main(void)
         
 #if 0
         // kills performance ...
-        else if ( bits >= 44 ) 
+        else if ( _get_R5_register() >= 44 ) 
         {
           do_nothing();
           state = STATE_ARBITRATE;
@@ -1070,7 +1070,7 @@ int main(void)
         // process the READ command
         //////////////////////////////////////////////////////////////////////
         // warning: won't work for read addrs > 127d
-        if ( bits == NUM_READ_BITS  && ( cmd[0] == 0xC2 ) )
+        if ( _get_R5_register() == NUM_READ_BITS  && ( cmd[0] == 0xC2 ) )
         {
           //DEBUG_PIN5_HIGH;
           handle_read(STATE_OPEN);
@@ -1080,8 +1080,8 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the REQUEST_RN command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits >= NUM_REQRN_BITS  && ( cmd[0] == 0xC1 ) )
-          //else if ( bits >= 30  && ( cmd[0] == 0xC1 ) )
+        else if ( _get_R5_register() >= NUM_REQRN_BITS  && ( cmd[0] == 0xC1 ) )
+          //else if ( _get_R5_register() >= 30  && ( cmd[0] == 0xC1 ) )
         {
           handle_request_rn(STATE_OPEN);
           setup_to_receive();
@@ -1090,7 +1090,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERY command
         //////////////////////////////////////////////////////////////////////
-        if ( bits == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
+        if ( _get_R5_register() == NUM_QUERY_BITS  && ( ( cmd[0] & 0xF0 ) == 0x80 ) )
         {
           handle_query(STATE_REPLY);
           //setup_to_receive();
@@ -1099,7 +1099,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYREP command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) ) 
+        else if ( _get_R5_register() == NUM_QUERYREP_BITS && ( ( cmd[0] & 0x06 ) == 0x00 ) ) 
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
@@ -1111,8 +1111,8 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the QUERYADJUST command
         //////////////////////////////////////////////////////////////////////
-        //else if ( bits == NUM_QUERYADJ_BITS  && ( ( cmd[0] & 0xF0 ) == 0x90 ) )
-          else if ( bits == 9  && ( ( cmd[0] & 0xF8 ) == 0x48 ) )
+        //else if ( _get_R5_register() == NUM_QUERYADJ_BITS  && ( ( cmd[0] & 0xF0 ) == 0x90 ) )
+          else if ( _get_R5_register() == 9  && ( ( cmd[0] & 0xF8 ) == 0x48 ) )
         {
           //DEBUG_PIN5_HIGH;
           do_nothing();
@@ -1123,7 +1123,7 @@ int main(void)
         ///////////////////////////////////////////////////////////////////////
         // process the ACK command
         ///////////////////////////////////////////////////////////////////////
-        else if ( bits == NUM_ACK_BITS  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
+        else if ( _get_R5_register() == NUM_ACK_BITS  && ( ( cmd[0] & 0xC0 ) == 0x40 ) )
         {
           //DEBUG_PIN5_HIGH;
           handle_ack(STATE_OPEN);
@@ -1134,7 +1134,7 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the SELECT command
         //////////////////////////////////////////////////////////////////////
-        else if ( bits >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
+        else if ( _get_R5_register() >= 44  && ( ( cmd[0] & 0xF0 ) == 0xA0 ) )
         {
           handle_select(STATE_READY); 
           delimiterNotFound = 1;
@@ -1142,8 +1142,8 @@ int main(void)
         //////////////////////////////////////////////////////////////////////
         // process the NAK command
         //////////////////////////////////////////////////////////////////////
-        //else if ( bits >= NUM_NAK_BITS && ( cmd[0] == 0xC0 ) )
-        else if ( bits >= 10 && ( cmd[0] == 0xC0 ) )
+        //else if ( _get_R5_register() >= NUM_NAK_BITS && ( cmd[0] == 0xC0 ) )
+        else if ( _get_R5_register() >= 10 && ( cmd[0] == 0xC0 ) )
         {
           handle_nak(STATE_ARBITRATE); 
           delimiterNotFound = 1;
@@ -1816,9 +1816,10 @@ inline void setup_to_receive()
   TACTL = TASSEL1 + MC1 + TAIE;  // SMCLK and continuous mode and Timer_A interrupt enabled.
 
   // initialize bits
-  bits = 0;
+  _set_R5_register(0);
   // initialize dest
-  dest = destorig;  // = &cmd[0]
+  // dest = destorig;  // = &cmd[0]
+  asm(" MOV.W destorig, R4");
   // clear R6 bits of word counter from prior communications to prevent dest++ on 1st port interrupt
   asm("CLR R6");
   
@@ -1973,7 +1974,7 @@ __interrupt void Port1_ISR(void)   // (5-6 cycles) to enter interrupt
 __interrupt void TimerA1_ISR(void)   // (6 cycles) to enter interrupt
 {
 
-    asm("MOV 0174h, R7");  // move TACCR1 to R7(count) register (3 CYCLES)
+    asm("MOV #0174h, R7");  // move TACCR1 to R7(count) register (3 CYCLES)
     TAR = 0;               // reset timer (4 cycles)
     TACCTL1 &= ~CCIFG;      // must manually clear interrupt flag (4 cycles)
 
@@ -2017,7 +2018,7 @@ __interrupt void TimerA1_ISR(void)   // (6 cycles) to enter interrupt
     asm("ADDC.b @R4+,-1(R4)\n"); // roll left (emulated by adding to itself == multiply by 2 + carry)
     // R6 lets us know when we have 8 bits, at which point we INC dest*            // (1 cycle)
     asm("INC R6\n");
-    asm("CMP #0008,R6\n\n");   // undo increment of dest* (R4) until we have 8 bits
+    asm("CMP #0008h,R6\n\n");   // undo increment of dest* (R4) until we have 8 bits
     asm("JGE out_p\n");
     asm("DEC R4\n");
     asm("out_p:\n");           // decrement R4 if we haven't gotten 16 bits yet  (3 or 4 cycles)
@@ -2028,7 +2029,7 @@ __interrupt void TimerA1_ISR(void)   // (6 cycles) to enter interrupt
 
     asm("this_Is_TRcal:\n");
     asm("MOV R7, R5\n");    // bits = count. use bits(R5) to assign new value of TRcal
-    TRcal = bits;       // assign new value     (4 cycles)
+    TRcal = _get_R5_register();       // assign new value     (4 cycles)
     asm("MOV #0003h, R5\n");      // bits = 3..assign 3 to bits, so it will keep track of current bits    (2 cycles)
     asm("CLR R6\n"); // (1 cycle)
     asm("RETI");
@@ -2040,7 +2041,7 @@ __interrupt void TimerA1_ISR(void)   // (6 cycles) to enter interrupt
     asm("ADDC.b @R4+,-1(R4)\n"); // roll left (emulated by adding to itself == multiply by 2 + carry)
     // R6 lets us know when we have 8 bits, at which point we INC dest*            // (1 cycle)
     asm("INC R6\n");
-    asm("CMP #0008,R6\n");   // undo increment of dest* (R4) until we have 8 bits
+    asm("CMP #0008h,R6\n");   // undo increment of dest* (R4) until we have 8 bits
     asm("JGE out_p1\n");
     asm("DEC R4\n");
     asm("out_p1:\n");           // decrement R4 if we haven't gotten 16 bits yet  (3 or 4 cycles)
@@ -2071,6 +2072,7 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
   TAR = 0;
   // assign data address to dest
   dest = data;
+  asm(" MOV.W dest, R4");
   // Setup timer
   P1SEL |= TX_PIN; //  select TIMER_A0
 //  P1DIR |= TX_PIN; // already set.
@@ -2102,7 +2104,9 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
   //<-------------- The below code will initiate some set up ---------------------->//
     //asm("MOV #05h, R14");
     //asm("MOV #02h, R15");
-    bits = TRext;       // 6 cycles
+    _set_R5_register(TRext);
+    asm(" NOP");
+    asm(" NOP");
     asm("CMP #0001h, R5");  // 1 cycles
     asm("JEQ TRextIs_1");   // 2 cycles
     asm("MOV #0004h, R9");   // 1 cycles
@@ -2115,7 +2119,10 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
 
     //
     asm("otherSetup:");
-    bits = numOfBits;                // (3 cycles).  This value will be adjusted. if numOfBit is constant, it takes 2 cycles
+    _set_R5_register(numOfBits);                // (3 cycles).  This value will be adjusted. if numOfBit is constant, it takes 2 cycles
+    asm(" NOP");
+    asm(" NOP");
+    asm(" NOP");
     asm("MOV #0bh, R14");     // (2 cycles) R14 is used as timer value 11, it will be 2 us in 6 MHz
     asm("MOV #05h, R15");      // (2 cycles) R15 is used as tiemr value 5, it will be 1 us in 6 MHz
     asm("MOV @R4+, R7");      // (2 cycles) Assign data to R7
@@ -2451,7 +2458,7 @@ inline void crc16_ccitt_readReply(unsigned int numDataBytes)
   // first, grab address of beginning of array
   readReply[numDataBytes + 2] = 0; // clear out this spot for the loner bit of handle
   readReply[numDataBytes + 4] = 0; // clear out this spot for the loner bit of crc
-  bits = (unsigned short) &readReply[0];
+  _set_R5_register((unsigned short) &readReply[0]);
   // shift all bytes and later use only data + handle
   asm("RRC.b @R5+");
   asm("RRC.b @R5+");
