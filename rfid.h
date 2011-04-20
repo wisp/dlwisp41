@@ -1,3 +1,5 @@
+/* See license.txt for license information. */
+
 #ifndef RFID_H
 #define RFID_H
 

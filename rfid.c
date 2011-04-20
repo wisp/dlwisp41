@@ -1,3 +1,5 @@
+/* See license.txt for license information. */
+
 #include "dlwisp41.h"
 #include "rfid.h"
 

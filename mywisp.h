@@ -1,3 +1,5 @@
+/* See license.txt for license information. */
+
 #ifndef MYWISP_H
 #define MYWISP_H
 
