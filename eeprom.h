@@ -1,3 +1,5 @@
+/* See license.txt for license information. */
+
 /*
  * File:   eeprom.h
  * Author: ssclark
