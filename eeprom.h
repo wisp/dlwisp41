@@ -9,7 +9,7 @@
 #define EEPROM_H
 
 #include <msp430x21x2.h>
-#include "pinDefWISP4.1DL.h"
+#include "dlwisp41.h"
 
 void init_eeprom();
 unsigned char write_eeprom(int address, unsigned char *data, int length);

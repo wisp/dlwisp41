@@ -1,10 +1,15 @@
 /* See license.txt for license information. */
 
+#ifndef DLWISP41_H
+#define DLWISP41_H
+
 // Pin definitions
 // WISP 4.1 DL
 // "Blue WISP"
 
 // MSP430F2132
+#include <msp430x21x2.h>
+#define USE_2132  1
 
 // See wisp.wikispaces.com for a schematic.
 
@@ -56,3 +61,13 @@
   P1DIR = TEMP_POWER | TX_PIN | RX_EN_PIN | DEBUG_1_4 | LED_POWER | CAP_SENSE; \
   P2DIR = DEBUG_2_3 | CRYSTAL_OUT; \
   P3DIR = CLK_A | VSENSE_POWER | TX_A | RX_A;
+
+#if DEBUG_PINS_ENABLED
+#define DEBUG_PIN5_HIGH               P3OUT |= BIT5;
+#define DEBUG_PIN5_LOW                P3OUT &= ~BIT5;
+#else
+#define DEBUG_PIN5_HIGH
+#define DEBUG_PIN5_LOW
+#endif
+
+#endif // DLWISP41_H
