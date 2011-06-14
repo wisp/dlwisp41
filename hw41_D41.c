@@ -54,11 +54,10 @@
 /* Other header files */
 #include "rfid.h"
 
-#if(WISP_VERSION == BLUE_WISP)
-  #include "dlwisp41.h"
-#else
+#if(WISP_VERSION != BLUE_WISP)
   #error "WISP Version not supported"
 #endif
+#include "dlwisp41.h"
 
 #if SIMPLE_QUERY_ACK
 #define ENABLE_READS                  0
