@@ -76,8 +76,6 @@ unsigned short crc16_ccitt(volatile unsigned char *data, unsigned short n);
 unsigned char crc5(volatile unsigned char *buf, unsigned short numOfBits);
 #endif
 
-#endif // RFID_H
-
 /* Handlers for RFID commands */
 /* XXX make these inline where appropriate, but only after restructuring
  * code so that the functions to be inlined are called from only one compilation
@@ -91,3 +89,5 @@ void handle_request_rn (volatile short nextState);
 void handle_read (volatile short nextState);
 void handle_nak (volatile short nextState);
 void do_nothing ();
+
+#endif // RFID_H
