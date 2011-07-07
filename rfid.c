@@ -2,6 +2,7 @@
 
 #include "dlwisp41.h"
 #include "rfid.h"
+#include "mywisp.h"
 
 unsigned short Q = 0;
 unsigned short slot_counter = 0;

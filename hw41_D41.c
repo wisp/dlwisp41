@@ -46,43 +46,16 @@
 //            is reset to 'A' with every reset at the top of the while loop.
 //******************************************************************************
 
-/*******************************************************************************
- *****************  Edit mywisp.h to configure this WISP  **********************
- ******************************************************************************/
-#include "mywisp.h"
-
-/* Other header files */
-#include "rfid.h"
-
 #if(WISP_VERSION != BLUE_WISP)
   #error "WISP Version not supported"
 #endif
 #include "dlwisp41.h"
+#include "rfid.h"
 
-#if SIMPLE_QUERY_ACK
-#define ENABLE_READS                  0
-#define READ_SENSOR                   0
-#warning "compiling simple query-ack application"
-#endif
-#if SENSOR_DATA_IN_ID
-#define ENABLE_READS                  0
-#define READ_SENSOR                   1
-#warning "compiling sensor data in id application"
-#endif
-#if SIMPLE_READ_COMMAND
-#define ENABLE_READS                  1
-#define READ_SENSOR                   0
-#warning "compiling simple read command application"
-#endif
-#if SENSOR_DATA_IN_READ_COMMAND
-#define ENABLE_READS                  1
-#define READ_SENSOR                   1
-#warning "compiling sensor data in read command application"
-#endif
-
-// pick only one
-#define MILLER_2_ENCODING             0             // not tested ... use ayor
-#define MILLER_4_ENCODING             1
+/*******************************************************************************
+ *****************  Edit mywisp.h to configure this WISP  **********************
+ ******************************************************************************/
+#include "mywisp.h"
 
 // as per mapping in monitor code
 #define wisp_debug_1                  DEBUG_1_4   // P1.4
@@ -91,18 +64,6 @@
 #define wisp_debug_4                  TX_A        // P3.4
 #define wisp_debug_5                  RX_A        // P3.5
 #define MONITOR_DEBUG_ON                 0
-
-// ------------------------------------------------------------------------
-
-#define SEND_CLOCK  \
-  BCSCTL1 = XT2OFF + RSEL3 + RSEL0 ; \
-    DCOCTL = DCO2 + DCO1 ;
-  //BCSCTL1 = XT2OFF + RSEL3 + RSEL1 ; \
-  //DCOCTL = 0;
-#define RECEIVE_CLOCK \
-  BCSCTL1 = XT2OFF + RSEL3 + RSEL1 + RSEL0; \
-  DCOCTL = 0; \
-  BCSCTL2 = 0; // Rext = ON
 
 volatile unsigned char* destorig = &cmd[0];       // pointer to beginning of cmd
 
@@ -119,15 +80,6 @@ volatile __no_init __regvar unsigned char* dest @ 4;
 // count of bits received from reader
 volatile __no_init __regvar unsigned short bits @ 5;
 unsigned short TRcal=0;
-
-#define STATE_READY               0
-#define STATE_ARBITRATE           1
-#define STATE_REPLY               2
-#define STATE_ACKNOWLEDGED        3
-#define STATE_OPEN                4
-#define STATE_SECURED             5
-#define STATE_KILLED              6
-#define STATE_READ_SENSOR         7
 
 #if ENABLE_SESSIONS
 // selected and session inventory flags
@@ -147,37 +99,8 @@ unsigned char session_table[] = {
     SESSION_STATE_A, SESSION_STATE_A,
     SESSION_STATE_A, SESSION_STATE_A
 };
-void initialize_sessions();
-void handle_session_timeout();
-inline int bitCompare(unsigned char *startingByte1, unsigned short startingBit1,
-        unsigned char *startingByte2, unsigned short startingBit2, unsigned
-        short len);
-#endif
-void setup_to_receive();
-void sleep();
-unsigned short is_power_good();
-#if ENABLE_SLOTS
-void lfsr();
-inline void loadRN16(), mixupRN16();
-#endif
-void crc16_ccitt_readReply(unsigned int);
+#endif // ENABLE_SESSIONS
 int i;
-
-#if READ_SENSOR
-  #if (ACTIVE_SENSOR == SENSOR_ACCEL_QUICK)
-    #include "quick_accel_sensor.h"
-  #elif (ACTIVE_SENSOR == SENSOR_ACCEL)
-    #include "accel_sensor.h"
-  #elif (ACTIVE_SENSOR == SENSOR_INTERNAL_TEMP)
-    #include "int_temp_sensor.h"
-  #elif (ACTIVE_SENSOR == SENSOR_EXTERNAL_TEMP)
-    #error "SENSOR_EXTERNAL_TEMP not yet implemented"
-  #elif (ACTIVE_SENSOR == SENSOR_NULL)
-    #include "null_sensor.h"
-  #elif (ACTIVE_SENSOR == SENSOR_COMM_STATS)
-    #error "SENSOR_COMM_STATS not yet implemented"
-  #endif
-#endif
 
 int main(void)
 {
@@ -1858,11 +1781,13 @@ void handle_session_timeout()
 // starting byte, that is).
 // startingBitX is a range from 7 (MSbit) to 0 (LSbit). Len is number of bits.
 // Returns a // 1 if they match and a 0 if they don't match.
-int bitCompare(unsigned char *startingByte1, unsigned short startingBit1,
-        unsigned char *startingByte2, unsigned short startingBit2,
-        unsigned short len) {
-
-        unsigned char test1, test2;
+inline int bitCompare(unsigned char *startingByte1,
+        unsigned short startingBit1,
+        unsigned char *startingByte2,
+        unsigned short startingBit2,
+        unsigned short len)
+{
+    unsigned char test1, test2;
 
     while ( len-- ) {
 
