@@ -1,5 +1,8 @@
 /* See license.txt for license information. */
 
+#ifndef ACCEL_SENSOR_H
+#define ACCEL_SENSOR_H
+
 // these bit definitions are specific to WISP 4.1 DL
 
 #define SENSOR_DATA_TYPE_ID       0x0D
@@ -246,5 +249,4 @@ __interrupt void wdt_ISR( void )
       return;
 }
 
-
-  
+#endif // ACCEL_SENSOR_H

@@ -1,5 +1,8 @@
 /* See license.txt for license information. */
 
+#ifndef QUICK_ACCEL_SENSOR_H
+#define QUICK_ACCEL_SENSOR_H
+
 // these bit definitions are specific to WISP 4.1 DL
 
 #define SENSOR_DATA_TYPE_ID       0x0B
@@ -18,3 +21,5 @@ unsigned char sensor_busy;
 void init_sensor();
 
 void read_sensor(unsigned char volatile *target);
+
+#endif // QUICK_ACCEL_SENSOR_H

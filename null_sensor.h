@@ -1,5 +1,8 @@
 /* See license.txt for license information. */
 
+#ifndef NULL_SENSOR_H
+#define NULL_SENSOR_H
+
 #define SENSOR_DATA_TYPE_ID       0x0C
 
 #define DATA_LENGTH_IN_WORDS      1
@@ -47,3 +50,5 @@ __interrupt void ADC10_ISR (void)
   LPM4_EXIT;
   return;
 }
+
+#endif // NULL_SENSOR_H

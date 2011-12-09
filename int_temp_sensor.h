@@ -1,5 +1,8 @@
 /* See license.txt for license information. */
 
+#ifndef INT_TEMP_SENSOR_H
+#define INT_TEMP_SENSOR_H
+
 #define SENSOR_DATA_TYPE_ID       0x0F
 
 unsigned char sensor_busy = 0;
@@ -69,3 +72,5 @@ unsigned char is_sensor_sampling()
   if ( sensor_busy ) return 1;
   return 0;
 }
+
+#endif // INT_TEMP_SENSOR_H
