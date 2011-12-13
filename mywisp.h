@@ -118,6 +118,9 @@
   #elif (ACTIVE_SENSOR == SENSOR_COMM_STATS)
     #error "SENSOR_COMM_STATS not yet implemented"
   #endif
+  extern unsigned char sensor_busy;
+  void init_sensor();
+  void read_sensor(unsigned char volatile *target);
 #endif
 
 // Other options

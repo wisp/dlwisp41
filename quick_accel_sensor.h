@@ -16,10 +16,4 @@
 #define DATA_LENGTH_IN_WORDS      3
 #define DATA_LENGTH_IN_BYTES      (DATA_LENGTH_IN_WORDS*2)
 
-unsigned char sensor_busy;
-
-void init_sensor();
-
-void read_sensor(unsigned char volatile *target);
-
 #endif // QUICK_ACCEL_SENSOR_H
