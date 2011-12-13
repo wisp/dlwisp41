@@ -1773,31 +1773,19 @@
     </settings>
   </configuration>
   <file>
-    <name>$PROJ_DIR$\accel_sensor.h</name>
-  </file>
-  <file>
     <name>$PROJ_DIR$\dlwisp41.h</name>
   </file>
   <file>
     <name>$PROJ_DIR$\hw41_D41.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$\int_temp_sensor.h</name>
-  </file>
-  <file>
     <name>$PROJ_DIR$\mywisp.h</name>
-  </file>
-  <file>
-    <name>$PROJ_DIR$\null_sensor.h</name>
   </file>
   <file>
     <name>$PROJ_DIR$\rfid.c</name>
   </file>
   <file>
     <name>$PROJ_DIR$\rfid.h</name>
-  </file>
-  <file>
-    <name>$PROJ_DIR$\temp_sensor.h</name>
   </file>
 </project>
 
