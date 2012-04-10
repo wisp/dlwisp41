@@ -1,6 +1,7 @@
 /* See license.txt for license information. */
 
 #include "dlwisp41.h"
+#include "rfid.h"
 #include "int_temp_sensor.h"
 
 unsigned char sensor_busy = 0;

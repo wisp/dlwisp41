@@ -1,6 +1,7 @@
 /* See license.txt for license information. */
 
 #include "dlwisp41.h"
+#include "rfid.h"
 #include "null_sensor.h"
 
 void init_sensor()
