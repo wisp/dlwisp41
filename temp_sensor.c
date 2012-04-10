@@ -21,7 +21,7 @@ void read_sensor(unsigned char volatile *target)
           sleep();
   
         // already off. Only needs to be done when READ has set
-        P1OUT &= ~BIT_IN_ENABLE;   // turn off comparator
+        P1OUT &= ~RX_EN_PIN;   // turn off comparator
         
         // Set up ADC for internal temperature sensor  
         ADC10CTL0 &= ~ENC; // make sure this is off otherwise settings are locked.
