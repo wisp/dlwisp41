@@ -1,4 +1,6 @@
 /* See license.txt for license information. */
+#include "mywisp.h"
+#if (ACTIVE_SENSOR == SENSOR_INTERNAL_TEMP)
 
 #include "dlwisp41.h"
 #include "rfid.h"
@@ -71,3 +73,5 @@ unsigned char is_sensor_sampling()
   if ( sensor_busy ) return 1;
   return 0;
 }
+
+#endif // (ACTIVE_SENSOR == SENSOR_INTERNAL_TEMP)

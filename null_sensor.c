@@ -1,4 +1,6 @@
 /* See license.txt for license information. */
+#include "mywisp.h"
+#if (ACTIVE_SENSOR == SENSOR_NULL)
 
 #include "dlwisp41.h"
 #include "rfid.h"
@@ -46,3 +48,5 @@ __interrupt void ADC10_ISR (void)
   LPM4_EXIT;
   return;
 }
+
+#endif // (ACTIVE_SENSOR == SENSOR_NULL)

@@ -1,4 +1,6 @@
 /* See license.txt for license information. */
+#include "mywisp.h"
+#if (ACTIVE_SENSOR == SENSOR_ACCEL)
 
 #include "dlwisp41.h"
 #include "accel_sensor.h"
@@ -229,3 +231,5 @@ __interrupt void wdt_ISR( void )
       LPM4_EXIT;
       return;
 }
+
+#endif // (ACTIVE_SENSOR == SENSOR_ACCEL)
