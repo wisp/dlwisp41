@@ -3,45 +3,73 @@
 #ifndef MYWISP_H
 #define MYWISP_H
 
+/*
+ * This file provides access to WISP application settings. It is intended to be
+ * modified by the user as per the step-by-step instructions given below.
+ */
+
 ////////////////////////////////////////////////////////////////////////////////
-// Step 1: pick an application
-// simple hardcoded query-ack
-#define SIMPLE_QUERY_ACK              1
-// return sampled sensor data as epc. best for range.
-#define SENSOR_DATA_IN_ID             0
-// support read commands. returns one word of counter data
+// Step 1: Pick an application mode
+//
+// 1(a): Only one of the four application modes below should be selected (set
+//        to 1). Make sure all the others are disabled (set to 0).
+//
+// Simple hardcoded query-ack
+#define SIMPLE_QUERY_ACK              0
+//
+// Return sampled sensor data as EPC. Best for longer range sensing.
+#define SENSOR_DATA_IN_ID             1
+//
+// Support read commands. Returns one word of counter data
 #define SIMPLE_READ_COMMAND           0
-// return sampled sensor data in a read command. returns three words of accel
+//
+// Return sampled sensor data in a read command. Returns three words of accel
 // data
 #define SENSOR_DATA_IN_READ_COMMAND   0
 ////////////////////////////////////////////////////////////////////////////////
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// Step 1A: pick a sensor type
-// If you're not using the SENSOR_DATA_IN_ID or SENSOR_DATA_IN_READ_COMMAND
-// apps, then this is a don't care.
-// Choices:
-// use "0C" - static data - for test purposes only
+// Step 2: Pick a sensor type
+//
+// NOTE:  If you're not using the SENSOR_DATA_IN_ID or 
+//        SENSOR_DATA_IN_READ_COMMAND apps, then this is a don't-care.
+//
+// 2(a) Determine which of the following sensor choices you would like to use:
+//
+// SENSOR_NULL(0x0C)
+//  static data - for test purposes only.
 #define SENSOR_NULL                   0
-// use "0D" accel sensor sampled with 10-bit ADC, full RC settling time
+//
+// SENSOR_ACCEL(0x0D)
+//  3-axis accelerometer sampled with 10-bit ADC. Allows for
+//  full RC settling time. More precision, but lower read rate.
 #define SENSOR_ACCEL                  1
-// use "0B" accel sensor sampled with 10-bit ADC, partial RC settling ("quick")
-// for more info, see wiki: Code Examples
+//
+// SENSOR_ACCEL_QUICK(0x0B)
+//  3-axis accelerometer sampled with 10-bit ADC, partial RC settling ("quick").
+//  Less power, faster read rate.
 #define SENSOR_ACCEL_QUICK            2
-// use "0F" built-in temperature sensor sampled with a 10-bit ADC
+//
+// SENSOR_INTERNAL_TEMP(0x0F)
+//  Built-in temperature sensor sampled with a 10-bit ADC
 #define SENSOR_INTERNAL_TEMP          3
-// use "0E" external temperature sensor sampled with a 10-bit ADC
+//
+// SENSOR_EXTERNAL_TEMP(0x0E)
+//  External temperature sensor sampled with a 10-bit ADC
 #define SENSOR_EXTERNAL_TEMP          4
-// use "0A" comm statistics
+//
+// SENSOR_COMM_STATS(0x0A)
+//  [Not implemented] Get information about the communication link.
 #define SENSOR_COMM_STATS             5
-
-// Choose Active Sensor:
+//
+// 2(b) Change the value of ACTIVE_SENSOR to the desired sensor title 
+//      from the list above:
 #define ACTIVE_SENSOR                 SENSOR_ACCEL_QUICK
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-// Step 2: pick a reader and wisp hardware
+// Step 3: Pick a reader and wisp hardware
 // make sure this syncs with project target
 #define BLUE_WISP                     0x41
 #define WISP_VERSION                  BLUE_WISP
@@ -49,7 +77,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-// Step 3: pick protocol features
+// Step 4: Select desired protocol features
+//
 // The spec actually requires all these features, but as a practical matter
 // supporting things like slotting and sessions requires extra power and thus
 // limits range. Another factor is if you are running out of room on flash --
@@ -66,23 +95,68 @@
 //
 // Known issue: ENABLE_SLOTS and ENABLE_SESSIONS won't work together;
 // it's probably just a matter of finding the right reply timing in handle_query
-#define ENABLE_SLOTS            0
-#define ENABLE_SESSIONS         0
-#define ENABLE_HANDLE_CHECKING          0 // not implemented yet ...
+// 
+// 4(a) Enable the desired protocol features (set to 1) below. For best
+//      performance of this WISP, disable all features below.
+//
+#define ENABLE_SLOTS                  0
+#define ENABLE_SESSIONS               0
+#define ENABLE_HANDLE_CHECKING        0 // [NOT IMPLEMENTED]
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-// Step 4: set EPC and TID identifiers (optional)
-#define WISP_ID 0x00, 2
-#define EPC 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, \
-    WISP_VERSION, WISP_ID
-#define TID_DESIGNER_ID_AND_MODEL_NUMBER 0xFF, 0xF0, 0x01
+// Step 5: set EPC and TID identifiers (optional)
+////////////////////////////////////////////////////////////////////////////////
+//
+// 5(a) Select an ID for your WISP. If using a numbered WISP, 
+//      enter that number here. The high/low byte will be computed by the
+//      preprocessor.
+#define WISP_EZ_ID 321
+//
+// 5(b) If desired, customize the first 9 bytes of the EPC ("User Field"):
+#define EPC_USER_FIELD 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00
+//
 ////////////////////////////////////////////////////////////////////////////////
 
-// Step 5: pick either Miller-2 or Miller-4 encoding
-#define MILLER_2_ENCODING 0 // not tested ... use ayor
+////////////////////////////////////////////////////////////////////////////////
+// Step 6: pick either Miller-2 or Miller-4 encoding
+////////////////////////////////////////////////////////////////////////////////
+// 6(a) Select a baseband coding method for T->R communications.
+//      Miller 4 is recommended!
+//
+#define MILLER_2_ENCODING 0 // [NOT TESTED ... use at your own risk]
 #define MILLER_4_ENCODING 1
+//
+////////////////////////////////////////////////////////////////////////////////
 
+////////////////////////////////////////////////////////////////////////////////
+// Step 7: Enable or disable DEBUG mode(s)
+////////////////////////////////////////////////////////////////////////////////
+// 7(a) If you happen to have a WISP Monitor device, you can enable this mode
+//      for simple debugging of WISP operation. If you don't, disable this mode.
+//
+#define DEBUG_PINS_ENABLED            0
+//
+////////////////////////////////////////////////////////////////////////////////
+
+
+////////////////////////////////////////////////////////////////////////////////
+// --Your WISP is now configured!--
+//
+// Nothing below this point needs to be modified by the user. 
+////////////////////////////////////////////////////////////////////////////////
+
+// WISP ID high/low byte computation (preprocessor)
+#define WISP_ID WISP_EZ_ID/256, WISP_EZ_ID%256
+
+// EPC sequencing
+#define EPC EPC_USER_FIELD, WISP_VERSION, WISP_ID
+
+// Other WISP info
+#define TID_DESIGNER_ID_AND_MODEL_NUMBER 0xFF, 0xF0, 0x01
+
+// This section will produce compile warnings indicating which application
+// is in use. These warnings are perfectly normal, no need to be alarmed!
 #if SIMPLE_QUERY_ACK
 #define ENABLE_READS                  0
 #define READ_SENSOR                   0
@@ -104,6 +178,7 @@
 #warning "compiling sensor data in read command application"
 #endif
 
+// Conditional include of sensor files. Not a pleasant structure, but it works!
 #if READ_SENSOR
   #if (ACTIVE_SENSOR == SENSOR_ACCEL_QUICK)
     #include "quick_accel_sensor.h"
@@ -122,8 +197,5 @@
   void init_sensor();
   void read_sensor(unsigned char volatile *target);
 #endif
-
-// Other options
-#define DEBUG_PINS_ENABLED            0
 
 #endif // MYWISP_H
