@@ -1,5 +1,4 @@
 # ignore IAR gunk
-*.dep
-*.ewd
+path.txt
 Debug/
 settings/

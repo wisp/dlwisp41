@@ -17,9 +17,8 @@ void init_sensor()
 }
 
 #if 1
-short read_sensor(unsigned char volatile *target)
-{
-  
+void read_sensor(unsigned char volatile *target)
+{  
         unsigned short enough_power;
   
         if(!is_power_good())
@@ -75,7 +74,7 @@ short read_sensor(unsigned char volatile *target)
           ADC10CTL1 = 0;       // turn adc off
           ADC10CTL0 = 0;       // turn adc off
           //DEBUG_PIN5_LOW;
-          return 0;
+          //return 0;
         }
 #endif
         
@@ -149,12 +148,12 @@ short read_sensor(unsigned char volatile *target)
         ADC10CTL1 = 0;       // turn adc off
         ADC10CTL0 = 0;       // turn adc off
          
-        return 1;
+        //return 1;
 }
 #endif
 
 #if 0
-short read_sensor(unsigned char volatile *target) 
+void read_sensor(unsigned char volatile *target) 
 {
         static short cntr = 0;
         
@@ -182,7 +181,7 @@ short read_sensor(unsigned char volatile *target)
         {
           DEBUG_PIN5_HIGH;
           DEBUG_PIN5_LOW;
-          return 0;
+          //return 0;
         }
         
 //#define DELTA   0x05
@@ -211,7 +210,7 @@ short read_sensor(unsigned char volatile *target)
         
         
         
-        return 1;
+        //return 1;
 }
 #endif
 

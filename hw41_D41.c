@@ -1094,6 +1094,7 @@ __interrupt void Port1_ISR(void)   // (5-6 cycles) to enter interrupt
   asm("RETI");
 
   asm("bit_Is_Zero_In_Port_Int:\n");                 // bits == 0
+  
 #if USE_2132
   asm("MOV #0000h, TA0R\n");     // reset timer (4 cycles)
 #else
@@ -1620,7 +1621,7 @@ unsigned short crc16_ccitt(volatile unsigned char *data, unsigned short n) {
   return(crc_16^0xffff);
 }
 
-inline void crc16_ccitt_readReply(unsigned int numDataBytes)
+void crc16_ccitt_readReply(unsigned int numDataBytes)
 {
 
   // shift everything over by 1 to accomodate leading "0" bit.

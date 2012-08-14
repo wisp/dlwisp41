@@ -58,9 +58,9 @@ void read_sensor(unsigned char volatile *target)
 
   while (ADC10CTL1 & ADC10BUSY);    // wait while ADC finished work
 
-  ackReply[4] = (ADC10MEM & 0xff);
+  *(target+1) = (ADC10MEM & 0xff);
   // grab msb bits and store it
-  ackReply[3] = (ADC10MEM & 0x0300) >> 8;
+  *(target) =   (ADC10MEM & 0x0300) >> 8;
 
   // GRAB DATA
   ADC10CTL0 &= ~ENC; // make sure this is off otherwise settings are locked.
@@ -71,9 +71,9 @@ void read_sensor(unsigned char volatile *target)
 
   while (ADC10CTL1 & ADC10BUSY);    // wait while ADC finished work
 
-  ackReply[6] = (ADC10MEM & 0xff);
+  *(target+3) = (ADC10MEM & 0xff);
   // grab msb bits and store it
-  ackReply[5] = (ADC10MEM & 0x0300) >> 8;
+  *(target+2) = (ADC10MEM & 0x0300) >> 8;
 
   // GRAB DATA
   ADC10CTL0 &= ~ENC; // make sure this is off otherwise settings are locked.
@@ -84,9 +84,9 @@ void read_sensor(unsigned char volatile *target)
 
   while (ADC10CTL1 & ADC10BUSY);    // wait while ADC finished work
 
-  ackReply[8] = (ADC10MEM & 0xff);
+  *(target+5) = (ADC10MEM & 0xff);
   // grab msb bits and store it
-  ackReply[7] = (ADC10MEM & 0x0300) >> 8;
+  *(target+4) = (ADC10MEM & 0x0300) >> 8;
 
   // Power off sensor and adc
   P1DIR &= ~ACCEL_POWER;
@@ -97,9 +97,9 @@ void read_sensor(unsigned char volatile *target)
 
   // Store sensor read count
   sensor_counter++;
-  ackReply[10] = (sensor_counter & 0x00ff);
+  *(target+7) = (sensor_counter & 0x00ff);
   // grab msb bits and store it
-  ackReply[9]  = (sensor_counter & 0xff00) >> 8;
+  *(target+6)  = (sensor_counter & 0xff00) >> 8;
 
   // turn on comparator
   P1OUT |= RX_EN_PIN;
