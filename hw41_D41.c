@@ -1067,42 +1067,42 @@ __interrupt void Port1_ISR(void)   // (5-6 cycles) to enter interrupt
   TAR = 0;            // 4 cycles
   LPM4_EXIT;
 
-  asm("CMP #0000h, R5\n");          // if (bits == 0) (1 cycle)
-  asm("JEQ bit_Is_Zero_In_Port_Int\n");                // 2 cycles
+  asm("CMP #0000h, R5\n"          // if (bits == 0) (1 cycle)
+      "JEQ bit_Is_Zero_In_Port_Int\n"                // 2 cycles
   // bits != 0:
-  asm("MOV #0000h, R5\n");          // bits = 0  (1 cycles)
+      "MOV #0000h, R5\n"          // bits = 0  (1 cycles)
 
-  asm("CMP #0010h, R7\n");          // finding delimeter (12.5us, 2 cycles)
+      "CMP #0010h, R7\n"          // finding delimeter (12.5us, 2 cycles)
                                     // 2d -> 14
-  asm("JNC delimiter_Value_Is_wrong\n");            //(2 cycles)
-  asm("CMP #0040h, R7");            // finding delimeter (12.5us, 2 cycles)
+      "JNC delimiter_Value_Is_wrong\n"            //(2 cycles)
+      "CMP #0040h, R7\n"            // finding delimeter (12.5us, 2 cycles)
                                     // 43H
-  asm("JC  delimiter_Value_Is_wrong\n");
-  asm("CLR P1IE");
+      "JC  delimiter_Value_Is_wrong\n"
+      "CLR P1IE\n"
 #if USE_2132
-  asm("BIS #8010h, TA0CCTL1\n");     // (5 cycles)   TACCTL1 |= CM1 + CCIE
+      "BIS #8010h, TA0CCTL1\n"     // (5 cycles)   TACCTL1 |= CM1 + CCIE
 #else
-  asm("BIS #8010h, TACCTL1\n");     // (5 cycles)   TACCTL1 |= CM1 + CCIE
+      "BIS #8010h, TACCTL1\n"     // (5 cycles)   TACCTL1 |= CM1 + CCIE
 #endif
-  asm("MOV #0004h, P1SEL\n");       // enable TimerA1    (4 cycles)
-  asm("RETI\n");
+      "MOV #0004h, P1SEL\n"       // enable TimerA1    (4 cycles)
+      "RETI\n"
 
-  asm("delimiter_Value_Is_wrong:\n");
-  asm("BIC #0004h, P1IES\n");
-  asm("MOV #0000h, R5\n");          // bits = 0  (1 cycles)
-  delimiterNotFound = 1;
-  asm("RETI");
+      "delimiter_Value_Is_wrong:\n"
+      "BIC #0004h, P1IES\n"
+      "MOV #0000h, R5\n"          // bits = 0  (1 cycles)
+      "MOV #0001h, &delimiterNotFound\n"
+      "RETI\n"
 
-  asm("bit_Is_Zero_In_Port_Int:\n");                 // bits == 0
-  
+      "bit_Is_Zero_In_Port_Int:\n"                 // bits == 0
+
 #if USE_2132
-  asm("MOV #0000h, TA0R\n");     // reset timer (4 cycles)
+      "MOV #0000h, TA0R\n"     // reset timer (4 cycles)
 #else
-  asm("MOV #0000h, TAR\n");     // reset timer (4 cycles)
+      "MOV #0000h, TAR\n"     // reset timer (4 cycles)
 #endif
-  asm("BIS #0004h, P1IES\n");   // 4 cycles  change port interrupt edge to neg
-  asm("INC R5\n");            // 1 cycle
-  asm("RETI\n");
+      "BIS #0004h, P1IES\n"   // 4 cycles  change port interrupt edge to neg
+      "INC R5\n"            // 1 cycle
+      "RETI\n");
 
 }
 //*************************************************************************
@@ -1124,89 +1124,89 @@ __interrupt void TimerA1_ISR(void)   // (6 cycles) to enter interrupt
     TACCTL1 &= ~CCIFG;      // must manually clear interrupt flag (4 cycles)
 
     //<------up to here 26 cycles + 6 cyles of Interrupt == 32 cycles -------->
-    asm("CMP #0003h, R5\n");      // if (bits >= 3).  it will do store bits
-    asm("JGE bit_Is_Over_Three\n");
+    asm("CMP #0003h, R5\n"      // if (bits >= 3).  it will do store bits
+        "JGE bit_Is_Over_Three\n"
     // bit is not 3
-    asm("CMP #0002h, R5\n");   // if ( bits == 2)
-    asm("JEQ bit_Is_Two\n");         // if (bits == 2).
+        "CMP #0002h, R5\n"   // if ( bits == 2)
+        "JEQ bit_Is_Two\n"         // if (bits == 2).
 
     // <----------------- bit is not 2 ------------------------------->
-    asm("CMP #0001h, R5\n");      // if (bits == 1) -- measure RTcal value.
-    asm("JEQ bit_Is_One\n");          // bits == 1
+        "CMP #0001h, R5\n"      // if (bits == 1) -- measure RTcal value.
+        "JEQ bit_Is_One\n"          // bits == 1
 
     // <-------------------- this is bit == 0 case --------------------->
-    asm("bit_Is_Zero_In_Timer_Int:");
-    asm("CLR R6\n");
-    asm("INC R5\n");        // bits++
-    asm("RETI");
+        "bit_Is_Zero_In_Timer_Int:\n"
+        "CLR R6\n"
+        "INC R5\n"        // bits++
+        "RETI\n"
     // <------------------- end of bit 0  --------------------------->
 
     // <-------------------- this is bit == 1 case --------------------->
-    asm("bit_Is_One:\n");         // bits == 1.  calculate RTcal value
-    asm("MOV R7, R9\n");       // 1 cycle
-    asm("RRA R7\n");    // R7(count) is divided by 2.   1 cycle
-    asm("MOV #0FFFFh, R8\n");   // R8(pivot) is set to max value    1 cycle
-    asm("SUB R7, R8\n");        // R8(pivot) = R8(pivot) -R7(count/2) make new
+        "bit_Is_One:\n"         // bits == 1.  calculate RTcal value
+        "MOV R7, R9\n"       // 1 cycle
+        "RRA R7\n"    // R7(count) is divided by 2.   1 cycle
+        "MOV #0FFFFh, R8\n"   // R8(pivot) is set to max value    1 cycle
+        "SUB R7, R8\n"        // R8(pivot) = R8(pivot) -R7(count/2) make new
                                 // R8(pivot) value     1 cycle
-    asm("INC R5\n");        // bits++
-    asm("CLR R6\n");
-    asm("RETI\n");
+        "INC R5\n"        // bits++
+        "CLR R6\n"
+        "RETI\n"
     // <------------------ end of bit 1 ------------------------------>
 
     // <-------------------- this is bit == 2 case --------------------->
-    asm("bit_Is_Two:\n");
-    asm("CMP R9, R7\n");    // if (count > (R9)(180)) this is hardcoded number,
+        "bit_Is_Two:\n"
+        "CMP R9, R7\n"    // if (count > (R9)(180)) this is hardcoded number,
                             // so have  to change to proper value
-    asm("JGE this_Is_TRcal\n");
+        "JGE this_Is_TRcal\n"
     // this is data
-    asm("this_Is_Data_Bit:\n");
-    asm("ADD R8, R7\n");   // count = count + pivot
+        "this_Is_Data_Bit:\n"
+        "ADD R8, R7\n"   // count = count + pivot
     // store bit by shifting carry flag into cmd[bits]=(dest*) and increment
     // dest* (5 cycles)
-    asm("ADDC.b @R4+,-1(R4)\n"); // roll left (emulated by adding to itself ==
+        "ADDC.b @R4+,-1(R4)\n" // roll left (emulated by adding to itself ==
                                  // multiply by 2 + carry)
     // R6 lets us know when we have 8 bits, at which point we INC dest* (1
     // cycle)
-    asm("INC R6\n");
-    asm("CMP #0008,R6\n\n");   // undo increment of dest* (R4) until we have 8
+        "INC R6\n"
+        "CMP #0008,R6\n\n"   // undo increment of dest* (R4) until we have 8
                                // bits
-    asm("JGE out_p\n");
-    asm("DEC R4\n");
-    asm("out_p:\n");           // decrement R4 if we haven't gotten 16 bits yet
+        "JGE out_p\n"
+        "DEC R4\n"
+        "out_p:\n"           // decrement R4 if we haven't gotten 16 bits yet
                                // (3 or 4 cycles)
-    asm("BIC #0008h,R6\n");   // when R6=8, this will set R6=0   (1 cycle)
-    asm("INC R5\n");
-    asm("RETI");
+        "BIC #0008h,R6\n"   // when R6=8, this will set R6=0   (1 cycle)
+        "INC R5\n"
+        "RETI\n"
     // <------------------ end of bit 2 ------------------------------>
 
-    asm("this_Is_TRcal:\n");
-    asm("MOV R7, R5\n");    // bits = count. use bits(R5) to assign new value of
+        "this_Is_TRcal:\n"
+        "MOV R7, R5\n"    // bits = count. use bits(R5) to assign new value of
                             // TRcal
-    TRcal = bits;       // assign new value     (4 cycles)
-    asm("MOV #0003h, R5\n");      // bits = 3..assign 3 to bits, so it will keep
+        "MOV R5, &TRcal\n"  // assign new value     (4 cycles)
+        "MOV #0003h, R5\n"      // bits = 3..assign 3 to bits, so it will keep
                                   // track of current bits    (2 cycles)
-    asm("CLR R6\n"); // (1 cycle)
-    asm("RETI");
+        "CLR R6\n" // (1 cycle)
+        "RETI\n"
 
    // <------------- this is bits >= 3 case ----------------------->
-    asm("bit_Is_Over_Three:\n");     // bits >= 3 , so store bits
-    asm("ADD R8, R7\n");    // R7(count) = R8(pivot) + R7(count),
+        "bit_Is_Over_Three:\n"     // bits >= 3 , so store bits
+        "ADD R8, R7\n"    // R7(count) = R8(pivot) + R7(count),
     // store bit by shifting carry flag into cmd[bits]=(dest*) and increment
     // dest* (5 cycles)
-    asm("ADDC.b @R4+,-1(R4)\n"); // roll left (emulated by adding to itself ==
+        "ADDC.b @R4+,-1(R4)\n" // roll left (emulated by adding to itself ==
                                  // multiply by 2 + carry)
     // R6 lets us know when we have 8 bits, at which point we INC dest* (1
     // cycle)
-    asm("INC R6\n");
-    asm("CMP #0008,R6\n");   // undo increment of dest* (R4) until we have 8
+        "INC R6\n"
+        "CMP #0008,R6\n"   // undo increment of dest* (R4) until we have 8
                              // bits
-    asm("JGE out_p1\n");
-    asm("DEC R4\n");
-    asm("out_p1:\n");        // decrement R4 if we haven't gotten 16 bits yet
+        "JGE out_p1\n"
+        "DEC R4\n"
+        "out_p1:\n"        // decrement R4 if we haven't gotten 16 bits yet
                              // (3 or 4 cycles)
-    asm("BIC #0008h,R6\n");  // when R6=8, this will set R6=0   (1 cycle)
-    asm("INC R5\n");         // bits++
-    asm("RETI\n");
+        "BIC #0008h,R6\n"  // when R6=8, this will set R6=0   (1 cycle)
+        "INC R5\n"         // bits++
+        "RETI");
     // <------------------ end of bit is over 3 ------------------------------>
 }
 
@@ -1265,160 +1265,160 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
     //asm("MOV #05h, R14");
     //asm("MOV #02h, R15");
     bits = TRext;       // 6 cycles
-    asm("CMP #0001h, R5");  // 1 cycles
-    asm("JEQ TRextIs_1");   // 2 cycles
-    asm("MOV #0004h, R9");   // 1 cycles
-    asm("JMP otherSetup");   // 2 cycles
+    asm("CMP #0001h, R5\n"  // 1 cycles
+        "JEQ TRextIs_1\n"   // 2 cycles
+        "MOV #0004h, R9\n"   // 1 cycles
+        "JMP otherSetup\n"   // 2 cycles
 
     // initialize loop for 16 M/LF
-    asm("TRextIs_1:");
-    asm("MOV #000fh, R9");    // 2 cycles    *** this will chagne to right value
-    asm("NOP");
+        "TRextIs_1:\n"
+        "MOV #000fh, R9\n"    // 2 cycles    *** this will chagne to right value
+        "NOP\n"
 
     //
-    asm("otherSetup:");
+        "otherSetup:");
     bits = numOfBits;                // (3 cycles).  This value will be
                                      // adjusted. if numOfBit is constant, it
                                      // takes 2 cycles
-    asm("MOV #0bh, R14"); // (2 cycles) R14 is used as timer value 11, it will
+    asm("MOV #0bh, R14\n" // (2 cycles) R14 is used as timer value 11, it will
                           // be 2 us in 6 MHz
-    asm("MOV #05h, R15"); // (2 cycles) R15 is used as tiemr value 5, it will be
+        "MOV #05h, R15\n" // (2 cycles) R15 is used as tiemr value 5, it will be
                           // 1 us in 6 MHz
-    asm("MOV @R4+, R7");  // (2 cycles) Assign data to R7
-    asm("MOV #0010h, R13");   // (2 cycles) Assign decimal 16 to R13, so it will
+        "MOV @R4+, R7\n"  // (2 cycles) Assign data to R7
+        "MOV #0010h, R13\n"   // (2 cycles) Assign decimal 16 to R13, so it will
                               // reduce the 1 cycle from below code
-    asm("MOV R13, R6");       // (1 cycle)
-    asm("SWPB R7");           // (1 cycle)    Swap Hi-byte and Low byte
-    asm("NOP");
-    asm("NOP");
+        "MOV R13, R6\n"       // (1 cycle)
+        "SWPB R7\n"           // (1 cycle)    Swap Hi-byte and Low byte
+        "NOP\n"
+        "NOP\n"
     // new timing needs 11 cycles
-    asm("NOP");
-    //asm("NOP");       // up to here, it make 1 to 0 transition.
+        "NOP\n"
+    //asm("NOP\n"       // up to here, it make 1 to 0 transition.
     //<----------------1 us --------------------------------
-    //asm("NOP");   // 1
-    //asm("NOP");   // 2
-    //asm("NOP");   // 3
-    //asm("NOP");   // 4
-    //asm("NOP");   // 5
-    //asm("NOP");   // 6
-    //asm("NOP");   // 7
-    //asm("NOP");   // 8
-    //asm("NOP");   // 9
+    //    "NOP\n"   // 1
+    //    "NOP\n"   // 2
+    //    "NOP\n"   // 3
+    //    "NOP\n"   // 4
+    //    "NOP\n"   // 5
+    //    "NOP\n"   // 6
+    //    "NOP\n"   // 7
+    //    "NOP\n"   // 8
+    //    "NOP\n"   // 9
     // <---------- End of 1 us ------------------------------
     // The below code will create the number of M/LF.  According to the spec,
     // if the TRext is 0, there are 4 M/LF.  If the TRext is 1, there are 16
     // M/LF
     // The upper code executed 1 M/LF, so the count(R9) should be number of M/LF
     // - 1
-    //asm("MOV #000fh, R9");    // 2 cycles  *** this will chagne to right value
-    asm("MOV #0001h, R10");   // 1 cycles
+    //asm("MOV #000fh, R9\n"    // 2 cycles  *** this will chagne to right value
+        "MOV #0001h, R10\n"   // 1 cycles
     // The below code will create the number base encoding waveform., so the
     // number of count(R9) should be times of M
     // For example, if M = 2 and TRext are 1(16, the number of count should be
     // 32.
-    asm("M_LF_Count:");
-    asm("NOP");   // 1
-    asm("NOP");   // 2
-    asm("NOP");   // 3
-    asm("NOP");   // 4
-    asm("NOP");   // 5
-    asm("NOP");   // 6
-    asm("NOP");   // 7
-    asm("NOP");   // 8
-    asm("NOP");   // 9
-    asm("NOP");   // 10
-    asm("NOP");   // 11
-    asm("NOP");   // 12
-    asm("NOP");   // 13
-    asm("NOP");   // 14
-    asm("NOP");   // 15
-    asm("NOP");   // 16
-    // asm("NOP");   // 17
+        "M_LF_Count:\n"
+        "NOP\n"   // 1
+        "NOP\n"   // 2
+        "NOP\n"   // 3
+        "NOP\n"   // 4
+        "NOP\n"   // 5
+        "NOP\n"   // 6
+        "NOP\n"   // 7
+        "NOP\n"   // 8
+        "NOP\n"   // 9
+        "NOP\n"   // 10
+        "NOP\n"   // 11
+        "NOP\n"   // 12
+        "NOP\n"   // 13
+        "NOP\n"   // 14
+        "NOP\n"   // 15
+        "NOP\n"   // 16
+        // "NOP\n"   // 17
 
-    asm("CMP R10, R9");       // 1 cycle
-    asm("JEQ M_LF_Count_End"); // 2 cycles
-    asm("INC R10");           // 1 cycle
-    asm("NOP");   // 22
-    asm("JMP M_LF_Count");      // 2 cycles
+        "CMP R10, R9\n"       // 1 cycle
+        "JEQ M_LF_Count_End\n" // 2 cycles
+        "INC R10\n"           // 1 cycle
+        "NOP\n"   // 22
+        "JMP M_LF_Count\n"      // 2 cycles
 
-    asm("M_LF_Count_End:");
+        "M_LF_Count_End:\n"
     // this code is preamble for 010111 , but for the loop, it will only send
     // 01011
-    asm("MOV #5c00h, R9");      // 2 cycles
-    asm("MOV #0006h, R10");     // 2 cycles
+        "MOV #5c00h, R9\n"      // 2 cycles
+        "MOV #0006h, R10\n"     // 2 cycles
     // this should be counted as 0. Therefore, Assembly DEC line should be 1
     // after executing
-    asm("Preamble_Loop:");
-    asm("DEC R10");               // 1 cycle
-    asm("JZ last_preamble_set");          // 2 cycle
-    asm("RLC R9");                // 1 cycle
-    asm("JNC preamble_Zero");     // 2 cycle      .. up to 6
+        "Preamble_Loop:\n"
+        "DEC R10\n"               // 1 cycle
+        "JZ last_preamble_set\n"          // 2 cycle
+        "RLC R9\n"                // 1 cycle
+        "JNC preamble_Zero\n"     // 2 cycle      .. up to 6
     // this is 1 case for preamble
-    asm("NOP");
+        "NOP\n"
 #if USE_2132
-    asm("MOV R14, TA0CCR0");       // 4 cycle      .. 10
+        "MOV R14, TA0CCR0\n"       // 4 cycle      .. 10
 #else
-    asm("MOV R14, TACCR0");       // 4 cycle      .. 10
+        "MOV R14, TACCR0\n"       // 4 cycle      .. 10
 #endif
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
 #if USE_2132
-    asm("MOV R15, TA0CCR0");       // 4 cycle      .. 19
+        "MOV R15, TA0CCR0\n"       // 4 cycle      .. 19
 #else
-    asm("MOV R15, TACCR0");       // 4 cycle      .. 19
+        "MOV R15, TACCR0\n"       // 4 cycle      .. 19
 #endif
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");                   // .. 22
-    asm("JMP Preamble_Loop");     // 2 cycles   .. 24
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"                   // .. 22
+        "JMP Preamble_Loop\n"     // 2 cycles   .. 24
 
     // this is 0 case for preamble
-    asm("preamble_Zero:");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
+        "preamble_Zero:\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
 
 
-    asm("JMP Preamble_Loop");     // 2 cycles .. 24
+        "JMP Preamble_Loop\n"     // 2 cycles .. 24
 
-    asm("last_preamble_set:");
-    asm("NOP");         // 4
-    asm("NOP");
-    asm("NOP");    // TURN ON
-    asm("NOP");
+        "last_preamble_set:\n"
+        "NOP\n"         // 4
+        "NOP\n"
+        "NOP\n"    // TURN ON
+        "NOP\n"
 #if USE_2132
-    asm("MOV.B R14, TA0CCR0");// 4 cycles
+        "MOV.B R14, TA0CCR0\n"// 4 cycles
 #else
-    asm("MOV.B R14, TACCR0");// 4 cycles
+        "MOV.B R14, TACCR0\n"// 4 cycles
 #endif
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
 #if USE_2132
-    asm("MOV.B R15, TA0CCR0");
+        "MOV.B R15, TA0CCR0\n"
 #else
-    asm("MOV.B R15, TACCR0");
+        "MOV.B R15, TACCR0\n"
 #endif
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
     //asm("NOP");
     //<------------- end of initial set up
 
@@ -1430,160 +1430,160 @@ void sendToReader(volatile unsigned char *data, unsigned char numOfBits)
 ************************************************************************/
 
     // this is starting of loop
-    asm("LOOPAGAIN:");
-    asm("DEC R5");                              // 1 cycle
-    asm("JEQ Three_Cycle_Loop_End");                // 2 cycle
+        "LOOPAGAIN:\n"
+        "DEC R5\n"                              // 1 cycle
+        "JEQ Three_Cycle_Loop_End\n"                // 2 cycle
     //<--------------loop condition ------------
-    asm("NOP");                                 // 1 cycle
-    asm("RLC R7");                              // 1 cycle
-    asm("JNC bit_is_zero");                 // 2 cycles  ..7
+        "NOP\n"                                 // 1 cycle
+        "RLC R7\n"                              // 1 cycle
+        "JNC bit_is_zero\n"                 // 2 cycles  ..7
 
     // bit is 1
-    asm("bit_is_one:");
+        "bit_is_one:\n"
 #if USE_2132
-    asm("MOV R14, TA0CCR0");                   // 4 cycles   ..11
+        "MOV R14, TA0CCR0\n"                   // 4 cycles   ..11
 #else
-    asm("MOV R14, TACCR0");                   // 4 cycles   ..11
+        "MOV R14, TACCR0\n"                   // 4 cycles   ..11
 #endif                // 4 cycles   ..11
-    asm("DEC R6");                              // 1 cycle  ..12
-    asm("JNZ bit_Count_Is_Not_16");              // 2 cycle    .. 14
+        "DEC R6\n"                              // 1 cycle  ..12
+        "JNZ bit_Count_Is_Not_16\n"              // 2 cycle    .. 14
     // This code will assign new data from reply and then swap bytes.  After
     // that, update R6 with 16 bits
     //asm("MOV @R4+, R7");
 #if USE_2132
-    asm("MOV R15, TA0CCR0");                   // 4 cycles   .. 20
+        "MOV R15, TA0CCR0\n"                   // 4 cycles   .. 20
 #else
-    asm("MOV R15, TACCR0");                   // 4 cycles   .. 20
+        "MOV R15, TACCR0\n"                   // 4 cycles   .. 20
 #endif
-    asm("MOV R13, R6");                         // 1 cycle    .. 22
+        "MOV R13, R6\n"                         // 1 cycle    .. 22
     //asm("MOV R15, TACCR0");                   // 4 cycles   .. 20
-    asm("MOV @R4+, R7");
+        "MOV @R4+, R7\n"
 
-    asm("SWPB R7");                             // 1 cycle    .. 21
+        "SWPB R7\n"                             // 1 cycle    .. 21
     //asm("MOV R13, R6");                         // 1 cycle    .. 22
     // End of assigning data byte
-    asm("JMP LOOPAGAIN");                       // 2 cycle    .. 24
+        "JMP LOOPAGAIN\n"                       // 2 cycle    .. 24
 
-    asm("seq_zero:");
-    asm("NOP");                         // 1 cycle   .. 3
+        "seq_zero:\n"
+        "NOP\n"                         // 1 cycle   .. 3
 #if USE_2132
-    asm("MOV R15, TA0CCR0");         // 4 cycles       ..7
+        "MOV R15, TA0CCR0\n"         // 4 cycles       ..7
 #else
-    asm("MOV R15, TACCR0");         // 4 cycles       ..7
+        "MOV R15, TACCR0\n"         // 4 cycles       ..7
 #endif
 
     // bit is 0, so it will check that next bit is 0 or not
-    asm("bit_is_zero:");                // up to 7 cycles
-    asm("DEC R6");                      // 1 cycle   .. 8
-    asm("JNE bit_Count_Is_Not_16_From0");           // 2 cycles  .. 10
+        "bit_is_zero:\n"                // up to 7 cycles
+        "DEC R6\n"                      // 1 cycle   .. 8
+        "JNE bit_Count_Is_Not_16_From0\n"           // 2 cycles  .. 10
     // bit count is 16
-    asm("DEC R5");                      // 1 cycle   .. 11
-    asm("JEQ Thirteen_Cycle_Loop_End");     // 2 cycle   .. 13
+        "DEC R5\n"                      // 1 cycle   .. 11
+        "JEQ Thirteen_Cycle_Loop_End\n"     // 2 cycle   .. 13
     // This code will assign new data from reply and then swap bytes.  After
     // that, update R6 with 16 bits
-    asm("MOV @R4+,R7");                 // 2 cycles     15
-    asm("SWPB R7");                     // 1 cycle      16
-    asm("MOV R13, R6");                 // 1 cycles     17
+        "MOV @R4+,R7\n"                 // 2 cycles     15
+        "SWPB R7\n"                     // 1 cycle      16
+        "MOV R13, R6\n"                 // 1 cycles     17
     // End of assigning new data byte
-    asm("RLC R7");              // 1 cycles     18
-    asm("JC nextBitIs1");           // 2 cycles  .. 20
+        "RLC R7\n"              // 1 cycles     18
+        "JC nextBitIs1\n"           // 2 cycles  .. 20
     // bit is 0
 #if USE_2132
-    asm("MOV R14, TA0CCR0");             // 4 cycles  .. 24
+        "MOV R14, TA0CCR0\n"             // 4 cycles  .. 24
 #else
-    asm("MOV R14, TACCR0");             // 4 cycles  .. 24
+        "MOV R14, TACCR0\n"             // 4 cycles  .. 24
 #endif
     // Next bit is 0 , it is 00 case
-    asm("JMP seq_zero");
+        "JMP seq_zero\n"
 
 // <---------this code is 00 case with no 16 bits.
-    asm("bit_Count_Is_Not_16_From0:");                  // up to 10 cycles
-    asm("DEC R5");                          // 1 cycle      11
-    asm("JEQ Thirteen_Cycle_Loop_End");         // 2 cycle    ..13
-    asm("NOP");                         // 1 cycles    ..14
-    asm("NOP");                             // 1 cycles    ..15
-    asm("NOP");                             // 1 cycles    ..16
-    asm("NOP");                             // 1 cycles    ..17
-    asm("RLC R7");                      // 1 cycle     .. 18
-    asm("JC nextBitIs1");               // 2 cycles    ..20
+        "bit_Count_Is_Not_16_From0:\n"                  // up to 10 cycles
+        "DEC R5\n"                          // 1 cycle      11
+        "JEQ Thirteen_Cycle_Loop_End\n"         // 2 cycle    ..13
+        "NOP\n"                         // 1 cycles    ..14
+        "NOP\n"                             // 1 cycles    ..15
+        "NOP\n"                             // 1 cycles    ..16
+        "NOP\n"                             // 1 cycles    ..17
+        "RLC R7\n"                      // 1 cycle     .. 18
+        "JC nextBitIs1\n"               // 2 cycles    ..20
 #if USE_2132
-    asm("MOV R14, TA0CCR0");               // 4 cycles   .. 24
+        "MOV R14, TA0CCR0\n"               // 4 cycles   .. 24
 #else
-    asm("MOV R14, TACCR0");               // 4 cycles   .. 24
+        "MOV R14, TACCR0\n"               // 4 cycles   .. 24
 #endif
-    asm("JMP seq_zero");        // 2 cycles    .. 2
+        "JMP seq_zero\n"        // 2 cycles    .. 2
 
 // whenever current bit is 0, then next bit is 1
-    asm("nextBitIs1:");     // 20
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");       // 24
+        "nextBitIs1:\n"     // 20
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"       // 24
 
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("JMP bit_is_one");  // end of bit 0 .. 7
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "JMP bit_is_one\n"  // end of bit 0 .. 7
 
-    asm("bit_Count_Is_Not_16:");       // up to here 14
-    asm("NOP");
+        "bit_Count_Is_Not_16:\n"       // up to here 14
+        "NOP\n"
 #if USE_2132
-    asm("MOV R15, TA0CCR0");             // 4 cycles   .. 20
+        "MOV R15, TA0CCR0\n"             // 4 cycles   .. 20
 #else
-    asm("MOV R15, TACCR0");             // 4 cycles   .. 20
+        "MOV R15, TACCR0\n"             // 4 cycles   .. 20
 #endif
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
-    asm("JMP LOOPAGAIN");     // 2 cycle          .. 24
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
+        "JMP LOOPAGAIN\n"     // 2 cycle          .. 24
 
     // below code is the end of loop code
-    asm("Three_Cycle_Loop_End:");
-    asm("JMP lastBit");     // 2 cycles   .. 5
+        "Three_Cycle_Loop_End:\n"
+        "JMP lastBit\n"     // 2 cycles   .. 5
 
-    asm("Thirteen_Cycle_Loop_End:");
-    asm("NOP");   // 1
-    asm("NOP");   // 2
-    asm("NOP");   // 3
-    asm("NOP");   // 4
-    asm("NOP");   // 5
-    asm("NOP");   // 6
-    asm("NOP");   // 7
-    asm("NOP");   // 8
-    asm("NOP");   // 9
-    asm("NOP");   // 10
-    asm("NOP");   // 11 ..24
-    asm("NOP");   // 12
-    asm("NOP");   // 13
-    asm("NOP");   // 14
-    asm("JMP lastBit");
+        "Thirteen_Cycle_Loop_End:\n"
+        "NOP\n"   // 1
+        "NOP\n"   // 2
+        "NOP\n"   // 3
+        "NOP\n"   // 4
+        "NOP\n"   // 5
+        "NOP\n"   // 6
+        "NOP\n"   // 7
+        "NOP\n"   // 8
+        "NOP\n"   // 9
+        "NOP\n"   // 10
+        "NOP\n"   // 11 ..24
+        "NOP\n"   // 12
+        "NOP\n"   // 13
+        "NOP\n"   // 14
+        "JMP lastBit\n"
 /***********************************************************************
 *   End of main loop
 ************************************************************************/
 // this is last data 1 bit which is dummy data
-    asm("lastBit:");
-    asm("NOP");
-    asm("NOP");
+        "lastBit:\n"
+        "NOP\n"
+        "NOP\n"
 #if USE_2132
-    asm("MOV.B R14, TA0CCR0");// 4 cycles
+        "MOV.B R14, TA0CCR0\n"// 4 cycles
 #else
-    asm("MOV.B R14, TACCR0");// 4 cycles
+        "MOV.B R14, TACCR0\n"// 4 cycles
 #endif
-    asm("NOP");
-    asm("NOP");
-    asm("NOP");
+        "NOP\n"
+        "NOP\n"
+        "NOP\n"
 #if USE_2132
-    asm("MOV.B R15, TA0CCR0");
+        "MOV.B R15, TA0CCR0\n"
 #else
-    asm("MOV.B R15, TACCR0");
+        "MOV.B R15, TACCR0\n"
 #endif
-    asm("NOP");
-    asm("NOP");
+        "NOP\n"
+        "NOP\n"
     // experiment
 
-    asm("NOP");
+        "NOP");
 
     //TACCR0 = 0;
 
